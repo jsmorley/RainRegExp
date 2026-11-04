@@ -62,11 +62,11 @@ int main() {
     try {
         NetworkOptions options;
         options.proxy = L"/none";
-        options.userAgent = L"RainRegExp-NetworkTest/5.0";
+        options.userAgent = L"RainRegExp-NetworkTest/5.1";
         options.headers = L"X-RainRegExp-One: first\r\nX-RainRegExp-Two: second\r\n\r\n";
         options.flags = ParseFlags(L"ForceReload|NoCookies|NoCacheWrite");
         auto request = Request(options, false);
-        Check(request.find("User-Agent: RainRegExp-NetworkTest/5.0\r\n") != std::string::npos, "UserAgent transmitted");
+        Check(request.find("User-Agent: RainRegExp-NetworkTest/5.1\r\n") != std::string::npos, "UserAgent transmitted");
         Check(request.find("X-RainRegExp-One: first\r\n") != std::string::npos && request.find("X-RainRegExp-Two: second\r\n") != std::string::npos, "Custom headers transmitted");
         request = Request(options, true);
         Check(request.find("GET http://rainregexp-test.invalid/sample HTTP/") == 0, "Configured proxy receives absolute request URL");

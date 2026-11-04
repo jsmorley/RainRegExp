@@ -32,3 +32,12 @@ if (-not (Test-Path -LiteralPath (Join-Path $dist 'RainRegExp.ini'))) {
     Copy-Item -LiteralPath (Join-Path $taskRoot 'RainRegExp.ini') -Destination $dist
 }
 Write-Host "Ready: $(Join-Path $dist 'RainRegExp.exe')"
+$versionMatch = [regex]::Match([IO.File]::ReadAllText((Join-Path $taskRoot 'CMakeLists.txt')), 'project\(RainRegExp VERSION (\d+\.\d+)\s')
+if (-not $versionMatch.Success) { throw 'Expected a major.minor version in CMakeLists.txt.' }
+$package = Join-Path $dist ('RainRegExp_' + $versionMatch.Groups[1].Value + '.zip')
+$packageFiles = @((Join-Path $dist 'RainRegExp.exe'), (Join-Path $taskRoot 'RainRegExp.ini'))
+foreach ($file in @('README.md','COPYRIGHT.txt','LICENSE.txt','PCRE-LICENCE.txt','PCRE-AUTHORS.txt')) {
+    $packageFiles += Join-Path $dist $file
+}
+Compress-Archive -LiteralPath $packageFiles -DestinationPath $package -Force
+Write-Host "Package: $package"

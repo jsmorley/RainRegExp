@@ -63,9 +63,9 @@ int main() {
         Check(DecodeText(std::string("\xfe\xff\x00\x41", 4)) == L"A", "UTF-16 BE input");
         auto options = ReadNetworkOptions(directory / L"missing.ini");
         Check(options.proxy == L"/auto" && options.userAgent == L"Rainmeter WebParser plugin" && options.flags == INTERNET_FLAG_RESYNCHRONIZE, "WebParser network defaults");
-        WriteText(directory / L"options.ini", L"[WebParser]\r\nProxyServer=/none\r\nUserAgent=Test/5.0\r\nHeader=Accept: text/html\r\nHeader2=X-Test: yes\r\nHeader4=Ignored: yes\r\nFlags=ForceReload|NoCookies|NoCacheWrite\r\n");
+        WriteText(directory / L"options.ini", L"[WebParser]\r\nProxyServer=/none\r\nUserAgent=Test/5.1\r\nHeader=Accept: text/html\r\nHeader2=X-Test: yes\r\nHeader4=Ignored: yes\r\nFlags=ForceReload|NoCookies|NoCacheWrite\r\n");
         options = ReadNetworkOptions(directory / L"options.ini");
-        Check(options.proxy == L"/none" && options.userAgent == L"Test/5.0", "Configured proxy and user agent");
+        Check(options.proxy == L"/none" && options.userAgent == L"Test/5.1", "Configured proxy and user agent");
         Check(options.headers == L"Accept: text/html\r\nX-Test: yes\r\n\r\n", "Consecutive numbered headers");
         Check(options.flags == (INTERNET_FLAG_RESYNCHRONIZE | INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_CACHE_WRITE), "Combined flags retain Resync like WebParser");
         Check(ParseFlags(L"Hyperlink|TempFile|NoAuth|PragmaNoCache|Secure|IgnoreCertName|IgnoreCertDate|IgnoreHTTPRedirect|IgnoreHTTPSRedirect") ==
@@ -75,9 +75,9 @@ int main() {
         bool rejected = false;
         try { ParseFlags(L"Unknown"); } catch (const std::exception&) { rejected = true; }
         Check(rejected, "Invalid flag diagnosed");
-        WriteText(directory / L"options.ini", L"[WebParser]\r\nUserAgent=Changed/5.0\r\n");
-        Check(ReadNetworkOptions(directory / L"options.ini").userAgent == L"Changed/5.0", "Options reread without restart");
-        const std::wstring iniText = L"[webparser]\r\nUserAgent=EncodingTest/5.0\r\nProxyServer=/none\r\nHeader=X-Name: café\r\n";
+        WriteText(directory / L"options.ini", L"[WebParser]\r\nUserAgent=Changed/5.1\r\n");
+        Check(ReadNetworkOptions(directory / L"options.ini").userAgent == L"Changed/5.1", "Options reread without restart");
+        const std::wstring iniText = L"[webparser]\r\nUserAgent=EncodingTest/5.1\r\nProxyServer=/none\r\nHeader=X-Name: café\r\n";
         for (bool little : {true, false}) {
             auto file = directory / (little ? L"utf16le.ini" : L"utf16be.ini");
             {
@@ -86,14 +86,14 @@ int main() {
                 for (auto c : iniText) { stream.put(static_cast<char>(little ? c & 255 : c >> 8)); stream.put(static_cast<char>(little ? c >> 8 : c & 255)); }
             }
             options = ReadNetworkOptions(file);
-            Check(options.userAgent == L"EncodingTest/5.0" && options.proxy == L"/none" && options.headers == L"X-Name: café\r\n\r\n", "UTF-16 INI decoding");
+            Check(options.userAgent == L"EncodingTest/5.1" && options.proxy == L"/none" && options.headers == L"X-Name: café\r\n\r\n", "UTF-16 INI decoding");
         }
         {
             std::ofstream stream(directory / L"utf8.ini", std::ios::binary);
-            stream << "[WebParser]\nUserAgent=Utf8/5.0\nHeader=X-Name: caf\xc3\xa9\n";
+            stream << "[WebParser]\nUserAgent=Utf8/5.1\nHeader=X-Name: caf\xc3\xa9\n";
         }
         options = ReadNetworkOptions(directory / L"utf8.ini");
-        Check(options.userAgent == L"Utf8/5.0" && options.headers == L"X-Name: café\r\n\r\n", "UTF-8 without BOM");
+        Check(options.userAgent == L"Utf8/5.1" && options.headers == L"X-Name: café\r\n\r\n", "UTF-8 without BOM");
         std::filesystem::remove_all(directory);
         std::cout << checks << " checks passed\n";
         return 0;

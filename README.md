@@ -1,4 +1,4 @@
-# RainRegExp 5.0.0.0
+# RainRegExp 5.1
 
 Native C++ / Win32 replacement for RainRegExp.au3. Copyright © 2026 Jeffrey
 Morley. Licensed under CC BY-NC-SA 3.0 Unported; see COPYRIGHT.txt and
@@ -6,7 +6,18 @@ LICENSE.txt. PCRE keeps its original license.
 
 ## Run
 
+Current release: **5.1**. Portable package: **RainRegExp_5.1.zip**.
+
 Download the portable ZIP from [GitHub Releases](https://github.com/jsmorley/RainRegExp/releases), extract it, and run `RainRegExp.exe`. Keep `RainRegExp.ini` beside it.
+
+## Interface
+
+The native Win32 interface uses rounded panels and buttons, blue Connect and
+Parse actions, underlined tabs, monospaced HTML/expression/output editors,
+visible keyboard focus, wrap-toggle highlighting, and a capture count.
+The app follows the Windows light/dark appearance and uses system colors in
+high-contrast mode. The familiar panel arrangement and parsing, networking,
+clipboard, file and session behavior are retained. It remains a portable EXE.
 
 ## Connection settings
 

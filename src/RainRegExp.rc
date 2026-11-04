@@ -6,8 +6,8 @@
 4 RCDATA "RainRegExp.txt"
 1 RT_MANIFEST "RainRegExp.manifest"
 1 VERSIONINFO
- FILEVERSION 5,0,0,0
- PRODUCTVERSION 5,0,0,0
+ FILEVERSION 5,1,0,0
+ PRODUCTVERSION 5,1,0,0
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_APP
 BEGIN
@@ -17,8 +17,8 @@ BEGIN
   BEGIN
    VALUE "FileDescription", "Test Rainmeter Regular Expressions"
    VALUE "ProductName", "RainRegExp"
-   VALUE "FileVersion", "5.0.0.0"
-   VALUE "ProductVersion", "5.0.0.0"
+   VALUE "FileVersion", "5.1"
+   VALUE "ProductVersion", "5.1"
    VALUE "LegalCopyright", "Copyright © 2026 Jeffrey Morley"
    VALUE "Comments", "Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported"
   END
