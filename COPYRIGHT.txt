@@ -1,0 +1,13 @@
+RainRegExp 5.0.0.0
+Copyright (c) 2026 Jeffrey Morley
+
+The application code, documentation and original RainRegExp artwork are
+licensed under Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+Unported (CC BY-NC-SA 3.0).
+
+License text: LICENSE.txt
+https://creativecommons.org/licenses/by-nc-sa/3.0/
+
+Third-party exception: the bundled PCRE library retains its original
+copyrights and BSD-style license. See PCRE-LICENCE.txt in the distribution
+or third_party/pcre/LICENCE in the source.

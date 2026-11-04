@@ -1,0 +1,6 @@
+* text=auto
+*.png binary
+*.bmp binary
+*.ico binary
+*.exe binary
+third_party/pcre/** -text
