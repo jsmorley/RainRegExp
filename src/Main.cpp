@@ -44,7 +44,7 @@ struct App {
     std::wstring completedText;
     int completedTarget = Output;
     int completedCaptures = -1;
-    bool settingsLoaded = false, settingsDirty = false;
+    bool settingsLoaded = false, settingsDirty = false, settingsResetPending = false;
     std::wstring savedSettings;
     ~App() {
         closing = true;
@@ -224,13 +224,14 @@ struct App {
         return result;
     }
     void SettingsChanged() {
-        settingsDirty = settingsLoaded && Text(SettingsEdit) != savedSettings;
+        settingsDirty = settingsLoaded && (settingsResetPending || Text(SettingsEdit) != savedSettings);
         Set(SettingsLabel, settingsDirty ? L"RainRegExp.ini *" : L"RainRegExp.ini");
     }
     void LoadSettings() {
         const auto path = SettingsPath();
         auto contents = SettingsEditorText(std::filesystem::exists(path) ? ReadText(path) : ResourceText(6));
         settingsLoaded = false;
+        settingsResetPending = false;
         Set(SettingsEdit, contents);
         savedSettings = contents;
         settingsLoaded = true;
@@ -245,6 +246,7 @@ struct App {
         if (std::filesystem::exists(path) && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
             throw std::runtime_error("Unable to back up RainRegExp.ini. Settings were not saved.");
         WriteText(path, contents);
+        settingsResetPending = false;
         savedSettings = contents;
         settingsLoaded = true;
         SettingsChanged();
@@ -256,7 +258,7 @@ struct App {
         int choice = MessageBoxW(window,L"Save your changes to RainRegExp.ini?",L"Unsaved settings",MB_YESNOCANCEL | MB_ICONQUESTION);
         if (choice == IDCANCEL) return false;
         if (choice == IDYES) SaveSettingsToDisk();
-        else { settingsLoaded = false; settingsDirty = false; Set(SettingsLabel,L"RainRegExp.ini"); }
+        else { settingsLoaded = false; settingsDirty = false; settingsResetPending = false; Set(SettingsLabel,L"RainRegExp.ini"); }
         return true;
     }
     void TabBackground(HWND control, HDC dc) const {
@@ -478,6 +480,7 @@ struct App {
         case Copy: Clipboard(); break;
         case SettingsSave: SaveSettingsToDisk(); break;
         case SettingsReset:
+            settingsResetPending = true;
             Set(SettingsEdit,SettingsEditorText(ResourceText(6)));
             SettingsChanged();
             Set(Status,L"Defaults restored in editor — Save to apply");

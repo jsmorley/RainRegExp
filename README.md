@@ -25,7 +25,8 @@ The Settings tab edits the `RainRegExp.ini` beside the running executable.
 Save validates the supported connection options, backs up the current file
 as `RainRegExp.ini.bak`, and writes UTF-8 with BOM. Saved options take effect
 on the next Connect without restarting. Reset puts the shipped defaults in
-the editor; click Save to apply them. Exit returns to Welcome. Unsaved edits
+the editor; click Save to apply them. Reset always requires Save or Discard,
+even if the defaults match the saved file. Exit returns to Welcome. Unsaved edits
 are marked with an asterisk, and Exit/app close offer Save, Discard, or Cancel.
 Switching to another tab preserves unsaved edits.
 ## Connection settings
