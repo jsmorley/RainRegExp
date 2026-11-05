@@ -10,6 +10,31 @@
 #include <memory>
 
 namespace rainregexp {
+std::wstring IniValue(const std::wstring& contents, const wchar_t* section, const wchar_t* key, const wchar_t* fallback) {
+    const auto trim = [](const std::wstring& value) {
+        const auto first = value.find_first_not_of(L" \t\r\n");
+        return first == std::wstring::npos ? std::wstring{} : value.substr(first,value.find_last_not_of(L" \t\r\n")-first+1);
+    };
+    std::wistringstream stream(contents);
+    std::wstring line;
+    bool inSection = false;
+    while (std::getline(stream,line)) {
+        line = trim(line);
+        if (line.empty() || line.front() == L';') continue;
+        if (line.front() == L'[' && line.back() == L']') {
+            inSection = _wcsicmp(trim(line.substr(1,line.size()-2)).c_str(),section) == 0;
+            continue;
+        }
+        if (!inSection) continue;
+        const auto equals = line.find(L'=');
+        if (equals == std::wstring::npos || _wcsicmp(trim(line.substr(0,equals)).c_str(),key) != 0) continue;
+        auto value = trim(line.substr(equals+1));
+        if (value.size() >= 2 && (value.front() == L'\"' || value.front() == L'\'') && value.front() == value.back())
+            value = value.substr(1,value.size()-2);
+        return value;
+    }
+    return fallback;
+}
 MatchResult Match(const std::wstring& subject, const std::wstring& pattern) {
     static_assert(sizeof(wchar_t) == 2, "WebParser uses UTF-16 code units");
     MatchResult result;

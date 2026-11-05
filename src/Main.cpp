@@ -11,6 +11,7 @@
 #include "Core.h"
 #include "Network.h"
 #include "ModernTheme.h"
+#include "Appearance.h"
 #include <thread>
 #include <atomic>
 #include <functional>
@@ -35,6 +36,7 @@ struct App {
     std::unique_ptr<Gdiplus::Bitmap> banner;
     IStream* bannerStream{};
     UINT dpi = 96;
+    int scalePercent = 0;
     std::filesystem::path directory, browseDirectory;
     std::vector<Control> controls;
     bool wrapInput = false, wrapPattern = false, busy = false;
@@ -58,7 +60,8 @@ struct App {
         if (smallFont) DeleteObject(smallFont);
     }
     HWND Get(int id) const { return GetDlgItem(window, id); }
-    int Scale(int value) const { return MulDiv(value, dpi, 96); }
+    int Scale(int value) const { return ScaleLogical(value,dpi,scalePercent); }
+    int FontHeight(int points) const { return scalePercent ? MulDiv(points*96,scalePercent,7200) : MulDiv(points,dpi,72); }
     std::wstring Text(int id) const {
         HWND control = Get(id);
         const int length = GetWindowTextLengthW(control);
@@ -105,13 +108,13 @@ struct App {
         auto previous = font;
         auto previousLink = linkFont;
         auto previousCode = codeFont, previousHeading = headingFont, previousSmall = smallFont;
-        font = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        font = CreateFontW(-FontHeight(10), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-        linkFont = CreateFontW(-MulDiv(9, dpi, 72), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+        linkFont = CreateFontW(-FontHeight(9), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-        codeFont = CreateFontW(-MulDiv(10, dpi, 72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,FIXED_PITCH,L"Consolas");
-        headingFont = CreateFontW(-MulDiv(10, dpi, 72),0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-        smallFont = CreateFontW(-MulDiv(9, dpi, 72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+        codeFont = CreateFontW(-FontHeight(10),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,FIXED_PITCH,L"Consolas");
+        headingFont = CreateFontW(-FontHeight(10),0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+        smallFont = CreateFontW(-FontHeight(9),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
         for (const auto& control : controls) {
             int id = GetDlgCtrlID(control.window);
             HFONT selected = id == Link ? linkFont : (id == HtmlHeading || id == PatternHeading || id == OutputHeading ? headingFont :
@@ -131,8 +134,36 @@ struct App {
         if (Get(Tabs)) SendMessageW(Get(Tabs), TCM_SETITEMSIZE, 0, MAKELPARAM(Scale(91), Scale(45)));
         InvalidateRect(window, nullptr, TRUE);
     }
+    void ApplyScale(int percent, UINT monitorDpi = 0, const RECT* suggested = nullptr) {
+        if (!monitorDpi) monitorDpi = GetDpiForWindow(window);
+        const UINT layoutDpi = LayoutDpi(monitorDpi,percent);
+        scalePercent = percent;
+        dpi = layoutDpi;
+        Fonts();
+        RECT bounds{0,0,Scale(modern::ClientWidth),Scale(modern::ClientHeight)};
+        const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(window,GWL_STYLE));
+        const DWORD extended = static_cast<DWORD>(GetWindowLongPtrW(window,GWL_EXSTYLE));
+        if (!AdjustWindowRectExForDpi(&bounds,style,FALSE,extended,monitorDpi))
+            throw std::runtime_error("Unable to calculate the scaled window size.");
+        RECT position{}; GetWindowRect(window,&position);
+        int x = suggested ? suggested->left : position.left;
+        int y = suggested ? suggested->top : position.top;
+        // Keep the window in the work area, or its caption reachable if oversized.
+        MONITORINFO monitor{sizeof(monitor)};
+        HMONITOR target = suggested ? MonitorFromRect(suggested,MONITOR_DEFAULTTONEAREST) : MonitorFromWindow(window,MONITOR_DEFAULTTONEAREST);
+        if (GetMonitorInfoW(target,&monitor)) {
+            LONG width = bounds.right-bounds.left, height = bounds.bottom-bounds.top;
+            LONG maxX = std::max(monitor.rcWork.left,monitor.rcWork.right-width);
+            LONG maxY = std::max(monitor.rcWork.top,monitor.rcWork.bottom-height);
+            x = std::max(monitor.rcWork.left,std::min(static_cast<LONG>(x),maxX));
+            y = std::max(monitor.rcWork.top,std::min(static_cast<LONG>(y),maxY));
+        }
+        SetWindowPos(window,nullptr,x,y,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOZORDER | SWP_NOACTIVATE);
+        Layout();
+        RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    }
     void Init() {
-        dpi = GetDpiForWindow(window);
+        dpi = LayoutDpi(GetDpiForWindow(window),scalePercent);
         theme.Load(window);
         Fonts();
         tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP,
@@ -241,6 +272,7 @@ struct App {
         const auto contents = Text(SettingsEdit);
         // Validate before touching the working INI or its backup.
         ParseNetworkOptions(contents);
+        const int newScalePercent = ParseScalePercent(contents);
         const auto path = SettingsPath();
         auto backup = path; backup += L".bak";
         if (std::filesystem::exists(path) && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
@@ -250,7 +282,8 @@ struct App {
         savedSettings = contents;
         settingsLoaded = true;
         SettingsChanged();
-        Set(Status,L"Settings saved — used on the next connection");
+        if (newScalePercent != scalePercent) ApplyScale(newScalePercent);
+        Set(Status,L"Settings saved — scale applied; connection options ready");
     }
     bool ConfirmSettingsExit() {
         SettingsChanged();
@@ -593,10 +626,8 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             if (reinterpret_cast<HWND>(wParam) == app->Get(Link)) { SetCursor(LoadCursorW(nullptr, IDC_HAND)); return TRUE; }
             break;
         case WM_DPICHANGED: {
-            app->dpi = HIWORD(wParam); app->Fonts();
-            auto rect = reinterpret_cast<RECT*>(lParam);
-            SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
-            app->Layout(); return 0;
+            app->ApplyScale(app->scalePercent,HIWORD(wParam),reinterpret_cast<RECT*>(lParam));
+            return 0;
         }
         case WM_CLOSE:
             if (!app->ConfirmSettingsExit()) return 0;
@@ -626,6 +657,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     App app; app.instance = instance;
     wchar_t path[32768]{}; GetModuleFileNameW(nullptr, path, 32768);
     app.directory = std::filesystem::path(path).parent_path();
+    std::wstring scalingWarning;
+    try {
+        const auto ini = app.directory / L"RainRegExp.ini";
+        app.scalePercent = ParseScalePercent(std::filesystem::exists(ini) ? ReadText(ini) : L"");
+    } catch (const std::exception& error) {
+        app.scalePercent = 0;
+        scalingWarning = DecodeText(error.what()) + L"\r\n\r\nUsing Windows scaling. Correct ScalePercent in Settings.";
+    }
     WNDCLASSEXW type{sizeof(type)};
     type.lpfnWndProc = WindowProc; type.hInstance = instance; type.lpszClassName = L"RainRegExp.Cpp.Window";
     type.hCursor = LoadCursorW(nullptr, IDC_ARROW); type.hbrBackground = nullptr;
@@ -633,7 +672,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     type.hIconSm = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
     RegisterClassExW(&type);
     UINT dpi = GetDpiForSystem();
-    RECT rect{0, 0, MulDiv(modern::ClientWidth, dpi, 96), MulDiv(modern::ClientHeight, dpi, 96)};
+    RECT rect{0, 0, ScaleLogical(modern::ClientWidth,dpi,app.scalePercent), ScaleLogical(modern::ClientHeight,dpi,app.scalePercent)};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRectExForDpi(&rect, style, FALSE, 0, dpi);
     int width = rect.right - rect.left, height = rect.bottom - rect.top;
@@ -641,7 +680,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         (GetSystemMetrics(SM_CXSCREEN) - width) / 2, (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
         width, height, nullptr, nullptr, instance, &app);
     if (!window) { if (singleton) CloseHandle(singleton); return 1; }
+    app.ApplyScale(app.scalePercent);
     ShowWindow(window, show); UpdateWindow(window);
+    if (!scalingWarning.empty()) MessageBoxW(window,scalingWarning.c_str(),L"RainRegExp scaling",MB_OK | MB_ICONWARNING);
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         // Dialog navigation without treating Escape as a request to close.

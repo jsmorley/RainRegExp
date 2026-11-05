@@ -1,5 +1,6 @@
 #include "Core.h"
 #include "Network.h"
+#include "Appearance.h"
 #include "config.h"
 #include "pcre.h"
 #include <iostream>
@@ -16,6 +17,31 @@ int main() {
     const auto directory = std::filesystem::temp_directory_path() / (L"RainRegExp-tests-" + std::to_wstring(GetCurrentProcessId()));
     try {
         std::filesystem::create_directories(directory);
+        Check(ParseScalePercent(L"") == 0, "Missing ScalePercent follows Windows");
+        Check(ParseScalePercent(L"[RainRegExp]\nScalePercent=Auto\n") == 0, "Explicit Auto scaling");
+        Check(ParseScalePercent(L"[rainregexp]\nscalepercent=\" auto \"\n") == 0, "Quoted Auto scaling");
+        Check(ParseScalePercent(L"[RainRegExp]\nScalePercent=\n") == 0, "Blank scale follows Windows");
+        for (int percent : ScalePresets) {
+            Check(ParseScalePercent(L"[RainRegExp]\nScalePercent=" + std::to_wstring(percent)) == percent, "Windows scale preset accepted");
+            for (UINT monitorDpi : {96U,120U,144U,168U,192U,240U,384U}) {
+                Check(LayoutDpi(monitorDpi,percent) == static_cast<UINT>(MulDiv(96,percent,100)), "Explicit scaling independent of Windows DPI");
+                Check(LayoutDpi(monitorDpi,0) == monitorDpi, "Auto follows each monitor DPI");
+            }
+        }
+        Check(MulDiv(960,LayoutDpi(192,100),96) == 960, "100 percent keeps base width on 200 percent Windows");
+        Check(MulDiv(960,LayoutDpi(192,0),96) == 1920, "Auto uses Windows 200 percent width");
+        for (int percent = 100; percent <= 150; ++percent) {
+            Check(ParseScalePercent(L"[RainRegExp]\nScalePercent="+std::to_wstring(percent)) == percent,"Every whole percent from 100 through 150 is accepted");
+            for (UINT monitorDpi : {96U,120U,144U,192U})
+                Check(ScaleLogical(960,monitorDpi,percent) == MulDiv(960,percent,100),"Custom scale geometry uses exact percentages independent of Windows");
+        }
+        Check(ScaleLogical(960,192,113) == 1085,"113 percent avoids intermediate DPI rounding");
+        Check(ScaleLogical(960,192,0) == 1920,"Auto geometry follows Windows DPI");
+        for (const auto* value : {L"0",L"99",L"151",L"160",L"180",L"275",L"600",L"-100",L"100%",L"125.0",L"Default",L"abc",L"999999999999"}) {
+            bool rejectedScale = false;
+            try { ParseScalePercent(L"[RainRegExp]\nScalePercent=" + std::wstring(value)); } catch(const std::exception&) { rejectedScale = true; }
+            Check(rejectedScale, "Non-preset scaling rejected");
+        }
         Check(std::string(pcre16_version()).find("8.45") == 0, "Exact PCRE version");
         auto result = Match(L"<TITLE>Hello\nWorld</TITLE><item>First</item><item>Second</item>", L"(?siU)<title>(.*)</title>.*<item>(.*)</item>");
         Check(result.code == 3 && result.captures[1] == L"Hello\nWorld" && result.captures[2] == L"First", "Inline siU flags and capture indices");

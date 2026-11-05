@@ -29,6 +29,26 @@ the editor; click Save to apply them. Reset always requires Save or Discard,
 even if the defaults match the saved file. Exit returns to Welcome. Unsaved edits
 are marked with an asterisk, and Exit/app close offer Save, Discard, or Cancel.
 Switching to another tab preserves unsaved edits.
+## Application scaling
+
+```ini
+[RainRegExp]
+ScalePercent=Auto
+```
+
+`Auto` (also the default when missing or blank) follows the Windows scaling
+of the monitor containing the app. Explicit values may be any whole number from **100 through 150**, then
+**175, 200, 225, 250, 300, 350, 400, 450, or 500**.
+For example, `ScalePercent=100` keeps the app content at its 100% pixel size
+even when Windows is at 125%, 150% or 200%. The value is an absolute scale,
+not a multiplier on Windows scaling. Windows still controls its title bar,
+native scrollbars and common file dialogs.
+
+Settings Save validates this value and immediately resizes the app without
+restarting. Reset restores `Auto` in the editor; Save applies it. Unsupported
+values are rejected on Save. An invalid value entered externally falls back
+to Windows scaling at startup with a message so Settings remains accessible.
+Existing INI files without this option continue following Windows.
 ## Connection settings
 
 All settings are read from `[WebParser]` in the INI beside the executable

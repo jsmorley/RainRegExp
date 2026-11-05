@@ -15,6 +15,7 @@ MatchResult Match(const std::wstring& subject, const std::wstring& pattern);
 std::wstring DecodeText(const std::string& bytes);
 std::wstring ReadText(const std::filesystem::path& path);
 void WriteText(const std::filesystem::path& path, const std::wstring& text);
+std::wstring IniValue(const std::wstring& contents, const wchar_t* section, const wchar_t* key, const wchar_t* fallback);
 struct Session { std::wstring url, pattern, notes; };
 void SaveSession(const std::filesystem::path& path, const Session& session);
 Session LoadSession(const std::filesystem::path& path);

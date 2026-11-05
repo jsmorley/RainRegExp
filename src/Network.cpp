@@ -36,27 +36,6 @@ DWORD ParseFlags(const std::wstring& text) {
     }
     return result;
 }
-static std::wstring Setting(const std::wstring& contents, const wchar_t* key, const wchar_t* fallback) {
-    std::wistringstream stream(contents);
-    std::wstring line;
-    bool inSection = false;
-    while (std::getline(stream, line)) {
-        line = Trim(line);
-        if (line.empty() || line.front() == L';') continue;
-        if (line.front() == L'[' && line.back() == L']') {
-            inSection = _wcsicmp(Trim(line.substr(1, line.size() - 2)).c_str(), L"WebParser") == 0;
-            continue;
-        }
-        if (!inSection) continue;
-        const auto equals = line.find(L'=');
-        if (equals == std::wstring::npos || _wcsicmp(Trim(line.substr(0, equals)).c_str(), key) != 0) continue;
-        auto value = Trim(line.substr(equals + 1));
-        if (value.size() >= 2 && (value.front() == L'\"' || value.front() == L'\'') && value.front() == value.back())
-            value = value.substr(1, value.size() - 2);
-        return value;
-    }
-    return fallback;
-}
 NetworkOptions ReadNetworkOptions(const std::filesystem::path& ini) {
     // Decode explicitly: the Win32 profile API does not support UTF-8 INI files.
     const auto contents = std::filesystem::exists(ini) ? ReadText(ini) : L"";
@@ -64,15 +43,15 @@ NetworkOptions ReadNetworkOptions(const std::filesystem::path& ini) {
 }
 NetworkOptions ParseNetworkOptions(const std::wstring& contents) {
     NetworkOptions options;
-    options.proxy = Setting(contents, L"ProxyServer", L"/auto");
+    options.proxy = IniValue(contents, L"WebParser", L"ProxyServer", L"/auto");
     if (options.proxy.empty()) options.proxy = L"/auto";
-    options.userAgent = Setting(contents, L"UserAgent", L"Rainmeter WebParser plugin");
+    options.userAgent = IniValue(contents, L"WebParser", L"UserAgent", L"Rainmeter WebParser plugin");
     if (options.userAgent.empty()) options.userAgent = L"Rainmeter WebParser plugin";
     if (options.userAgent.find_first_of(L"\r\n") != std::wstring::npos) throw std::runtime_error("UserAgent must be a single line.");
-    options.flags = ParseFlags(Setting(contents, L"Flags", L"Resync"));
+    options.flags = ParseFlags(IniValue(contents, L"WebParser", L"Flags", L"Resync"));
     for (unsigned index = 1;; ++index) {
         auto key = index == 1 ? L"Header" : L"Header" + std::to_wstring(index);
-        auto value = Setting(contents, key.c_str(), L"");
+        auto value = IniValue(contents, L"WebParser", key.c_str(), L"");
         if (value.empty()) break;
         options.headers += value + L"\r\n";
     }
