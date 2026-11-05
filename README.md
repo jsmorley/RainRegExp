@@ -1,4 +1,4 @@
-# RainRegExp 5.1
+# RainRegExp 5.2
 
 Native C++ / Win32 replacement for RainRegExp.au3. Copyright © 2026 Jeffrey
 Morley. Licensed under CC BY-NC-SA 3.0 Unported; see COPYRIGHT.txt and
@@ -6,7 +6,7 @@ LICENSE.txt. PCRE keeps its original license.
 
 ## Run
 
-Current release: **5.1**. Portable package: **RainRegExp_5.1.zip**.
+Current release: **5.2**. Portable package: **RainRegExp_5.2.zip**.
 
 Download the portable ZIP from [GitHub Releases](https://github.com/jsmorley/RainRegExp/releases), extract it, and run `RainRegExp.exe`. Keep `RainRegExp.ini` beside it.
 
@@ -15,7 +15,7 @@ Download the portable ZIP from [GitHub Releases](https://github.com/jsmorley/Rai
 The native Win32 interface uses rounded panels and buttons, blue Connect and
 Parse actions, underlined tabs, monospaced HTML/expression/output editors,
 visible keyboard focus, wrap-toggle highlighting, and a capture count.
-The app follows the Windows light/dark appearance and uses system colors in
+The app follows the Windows light/dark appearance by default and uses system colors in
 high-contrast mode. The familiar panel arrangement and parsing, networking,
 clipboard, file and session behavior are retained. It remains a portable EXE.
 
@@ -29,6 +29,23 @@ the editor; click Save to apply them. Reset always requires Save or Discard,
 even if the defaults match the saved file. Exit returns to Welcome. Unsaved edits
 are marked with an asterisk, and Exit/app close offer Save, Discard, or Cancel.
 Switching to another tab preserves unsaved edits.
+## Dark mode
+
+```ini
+[RainRegExp]
+DarkMode=Auto
+```
+
+`Auto` (the default when missing or blank) follows Windows app mode.
+`True` forces dark mode; `False` forces light mode. Values are case insensitive.
+Settings Save applies the change immediately, without restarting. Windows
+high-contrast colors take priority over either override.
+
+The banner uses the complete 256-pixel raindrop from `src/Rainmeter.ico`
+and the original lettering with proper antialiased transparency. Transparent
+padding prevents clipping at the bottom, and rendering preserves its aspect
+ratio. The original application icon `rX.ico` is retained. The optional
+`tools/ConvertBanner.ps1` reproduces the banner using PowerShell 7.
 ## Application scaling
 
 ```ini

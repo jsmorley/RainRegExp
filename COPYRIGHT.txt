@@ -1,4 +1,4 @@
-RainRegExp 5.1
+RainRegExp 5.2
 Copyright (c) 2026 Jeffrey Morley
 
 The application code, documentation and original RainRegExp artwork are

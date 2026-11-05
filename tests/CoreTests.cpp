@@ -17,6 +17,23 @@ int main() {
     const auto directory = std::filesystem::temp_directory_path() / (L"RainRegExp-tests-" + std::to_wstring(GetCurrentProcessId()));
     try {
         std::filesystem::create_directories(directory);
+        Check(ParseDarkMode(L"") == DarkMode::Auto,"Missing DarkMode follows Windows");
+        Check(ParseDarkMode(L"[RainRegExp]\nDarkMode=Auto\n") == DarkMode::Auto,"Explicit automatic theme");
+        Check(ParseDarkMode(L"[rainregexp]\ndarkmode= true \n") == DarkMode::Enabled,"Forced dark mode, case insensitive");
+        Check(ParseDarkMode(L"[RainRegExp]\nDarkMode=False\n") == DarkMode::Disabled,"Forced light mode");
+        Check(ParseDarkMode(L"[RainRegExp]\nDarkMode=\n") == DarkMode::Auto,"Blank DarkMode follows Windows");
+        for (auto mode : {DarkMode::Auto,DarkMode::Enabled,DarkMode::Disabled}) {
+            for (bool windowsDark : {false,true}) {
+                Check(!ResolveDarkMode(mode,windowsDark,true),"High contrast retains system colors for every override");
+                const bool expected = mode == DarkMode::Enabled || (mode == DarkMode::Auto && windowsDark);
+                Check(ResolveDarkMode(mode,windowsDark,false) == expected,"Theme override is independent of Windows when explicit");
+            }
+        }
+        for (const auto* value : {L"Yes",L"No",L"1",L"0",L"Dark",L"Light",L"Wrong"}) {
+            bool rejectedTheme = false;
+            try { ParseDarkMode(L"[RainRegExp]\nDarkMode="+std::wstring(value)); } catch(const std::exception&) { rejectedTheme = true; }
+            Check(rejectedTheme,"Invalid DarkMode rejected");
+        }
         Check(ParseScalePercent(L"") == 0, "Missing ScalePercent follows Windows");
         Check(ParseScalePercent(L"[RainRegExp]\nScalePercent=Auto\n") == 0, "Explicit Auto scaling");
         Check(ParseScalePercent(L"[rainregexp]\nscalepercent=\" auto \"\n") == 0, "Quoted Auto scaling");
@@ -89,9 +106,9 @@ int main() {
         Check(DecodeText(std::string("\xfe\xff\x00\x41", 4)) == L"A", "UTF-16 BE input");
         auto options = ReadNetworkOptions(directory / L"missing.ini");
         Check(options.proxy == L"/auto" && options.userAgent == L"Rainmeter WebParser plugin" && options.flags == INTERNET_FLAG_RESYNCHRONIZE, "WebParser network defaults");
-        WriteText(directory / L"options.ini", L"[WebParser]\r\nProxyServer=/none\r\nUserAgent=Test/5.1\r\nHeader=Accept: text/html\r\nHeader2=X-Test: yes\r\nHeader4=Ignored: yes\r\nFlags=ForceReload|NoCookies|NoCacheWrite\r\n");
+        WriteText(directory / L"options.ini", L"[WebParser]\r\nProxyServer=/none\r\nUserAgent=Test/5.2\r\nHeader=Accept: text/html\r\nHeader2=X-Test: yes\r\nHeader4=Ignored: yes\r\nFlags=ForceReload|NoCookies|NoCacheWrite\r\n");
         options = ReadNetworkOptions(directory / L"options.ini");
-        Check(options.proxy == L"/none" && options.userAgent == L"Test/5.1", "Configured proxy and user agent");
+        Check(options.proxy == L"/none" && options.userAgent == L"Test/5.2", "Configured proxy and user agent");
         Check(options.headers == L"Accept: text/html\r\nX-Test: yes\r\n\r\n", "Consecutive numbered headers");
         Check(options.flags == (INTERNET_FLAG_RESYNCHRONIZE | INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_CACHE_WRITE), "Combined flags retain Resync like WebParser");
         Check(ParseFlags(L"Hyperlink|TempFile|NoAuth|PragmaNoCache|Secure|IgnoreCertName|IgnoreCertDate|IgnoreHTTPRedirect|IgnoreHTTPSRedirect") ==
@@ -106,9 +123,9 @@ int main() {
         Check(rejected, "Settings editor validates invalid flags before saving");
         options = ParseNetworkOptions(L"; comment kept by editor\r\n[WebParser]\r\nUserAgent=Edited settings\r\nProxyServer=/none\r\nHeader=X-Edited: yes\r\nFlags=NoCookies\r\n");
         Check(options.userAgent == L"Edited settings" && options.proxy == L"/none" && options.headers == L"X-Edited: yes\r\n\r\n" && options.flags == (INTERNET_FLAG_RESYNCHRONIZE | INTERNET_FLAG_NO_COOKIES), "Editor validation uses the same option parser as Connect");
-        WriteText(directory / L"options.ini", L"[WebParser]\r\nUserAgent=Changed/5.1\r\n");
-        Check(ReadNetworkOptions(directory / L"options.ini").userAgent == L"Changed/5.1", "Options reread without restart");
-        const std::wstring iniText = L"[webparser]\r\nUserAgent=EncodingTest/5.1\r\nProxyServer=/none\r\nHeader=X-Name: café\r\n";
+        WriteText(directory / L"options.ini", L"[WebParser]\r\nUserAgent=Changed/5.2\r\n");
+        Check(ReadNetworkOptions(directory / L"options.ini").userAgent == L"Changed/5.2", "Options reread without restart");
+        const std::wstring iniText = L"[webparser]\r\nUserAgent=EncodingTest/5.2\r\nProxyServer=/none\r\nHeader=X-Name: café\r\n";
         for (bool little : {true, false}) {
             auto file = directory / (little ? L"utf16le.ini" : L"utf16be.ini");
             {
@@ -117,14 +134,14 @@ int main() {
                 for (auto c : iniText) { stream.put(static_cast<char>(little ? c & 255 : c >> 8)); stream.put(static_cast<char>(little ? c >> 8 : c & 255)); }
             }
             options = ReadNetworkOptions(file);
-            Check(options.userAgent == L"EncodingTest/5.1" && options.proxy == L"/none" && options.headers == L"X-Name: café\r\n\r\n", "UTF-16 INI decoding");
+            Check(options.userAgent == L"EncodingTest/5.2" && options.proxy == L"/none" && options.headers == L"X-Name: café\r\n\r\n", "UTF-16 INI decoding");
         }
         {
             std::ofstream stream(directory / L"utf8.ini", std::ios::binary);
-            stream << "[WebParser]\nUserAgent=Utf8/5.1\nHeader=X-Name: caf\xc3\xa9\n";
+            stream << "[WebParser]\nUserAgent=Utf8/5.2\nHeader=X-Name: caf\xc3\xa9\n";
         }
         options = ReadNetworkOptions(directory / L"utf8.ini");
-        Check(options.userAgent == L"Utf8/5.1" && options.headers == L"X-Name: café\r\n\r\n", "UTF-8 without BOM");
+        Check(options.userAgent == L"Utf8/5.2" && options.headers == L"X-Name: café\r\n\r\n", "UTF-8 without BOM");
         std::filesystem::remove_all(directory);
         std::cout << checks << " checks passed\n";
         return 0;

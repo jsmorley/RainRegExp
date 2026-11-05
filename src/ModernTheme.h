@@ -5,6 +5,7 @@
 #include <dwmapi.h>
 #include <string>
 #include <algorithm>
+#include "Appearance.h"
 
 namespace modern {
 constexpr int ClientWidth = 960, ClientHeight = 772;
@@ -17,14 +18,14 @@ struct Theme {
         for (auto brush : {backgroundBrush, surfaceBrush, editorBrush}) if (brush) DeleteObject(brush);
         backgroundBrush = surfaceBrush = editorBrush = nullptr;
     }
-    void Load(HWND window) {
+    void Load(HWND window, rainregexp::DarkMode mode) {
         HIGHCONTRASTW contrast{sizeof(contrast)};
         SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0);
         highContrast = (contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
         DWORD light = 1, size = sizeof(light);
         RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
             L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
-        dark = !light && !highContrast;
+        dark = rainregexp::ResolveDarkMode(mode,!light,highContrast);
         background = dark ? RGB(27,31,38) : RGB(243,245,248);
         surface = dark ? RGB(37,43,52) : RGB(255,255,255);
         text = dark ? RGB(230,237,247) : RGB(36,50,71);

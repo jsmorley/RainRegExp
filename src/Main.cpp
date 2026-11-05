@@ -32,6 +32,7 @@ struct App {
     HWND window{}, tooltip{};
     HFONT font{}, linkFont{}, codeFont{}, headingFont{}, smallFont{};
     modern::Theme theme;
+    DarkMode darkMode = DarkMode::Auto;
     HWND hoveredButton{};
     std::unique_ptr<Gdiplus::Bitmap> banner;
     IStream* bannerStream{};
@@ -164,7 +165,7 @@ struct App {
     }
     void Init() {
         dpi = LayoutDpi(GetDpiForWindow(window),scalePercent);
-        theme.Load(window);
+        theme.Load(window,darkMode);
         Fonts();
         tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP,
             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, window, nullptr, instance, nullptr);
@@ -196,7 +197,7 @@ struct App {
             TCITEMW item{}; item.mask = TCIF_TEXT; item.pszText = const_cast<wchar_t*>(title);
             TabCtrl_InsertItem(Get(Tabs), TabCtrl_GetItemCount(Get(Tabs)), &item);
         }
-        Add(L"STATIC", L"", SS_OWNERDRAW, Banner, 512, 565, 246, 49, 0);
+        Add(L"STATIC", L"", SS_OWNERDRAW, Banner, 512, 559, 255, 55, 0);
         auto pngResource = FindResourceW(instance, MAKEINTRESOURCEW(5), RT_RCDATA);
         auto pngHandle = LoadResource(instance, pngResource);
         bannerStream = SHCreateMemStream(static_cast<const BYTE*>(LockResource(pngHandle)), SizeofResource(instance, pngResource));
@@ -273,6 +274,7 @@ struct App {
         // Validate before touching the working INI or its backup.
         ParseNetworkOptions(contents);
         const int newScalePercent = ParseScalePercent(contents);
+        const DarkMode newDarkMode = ParseDarkMode(contents);
         const auto path = SettingsPath();
         auto backup = path; backup += L".bak";
         if (std::filesystem::exists(path) && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
@@ -282,8 +284,9 @@ struct App {
         savedSettings = contents;
         settingsLoaded = true;
         SettingsChanged();
+        if (newDarkMode != darkMode) { darkMode = newDarkMode; RefreshTheme(); }
         if (newScalePercent != scalePercent) ApplyScale(newScalePercent);
-        Set(Status,L"Settings saved — scale applied; connection options ready");
+        Set(Status,L"Settings saved — appearance applied; connection options ready");
     }
     bool ConfirmSettingsExit() {
         SettingsChanged();
@@ -338,7 +341,7 @@ struct App {
         }
     }
     void RefreshTheme() {
-        theme.Load(window);
+        theme.Load(window,darkMode);
         RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
     }
     static LRESULT CALLBACK ButtonProc(HWND button, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR data) {
@@ -616,7 +619,14 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
                 app->TabBackground(item->hwndItem, item->hDC);
                 Gdiplus::Graphics graphics(item->hDC);
                 graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                graphics.DrawImage(app->banner.get(), 0, 0, item->rcItem.right, item->rcItem.bottom);
+                graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+                const float ratio = std::min(static_cast<float>(item->rcItem.right) / app->banner->GetWidth(),
+                    static_cast<float>(item->rcItem.bottom) / app->banner->GetHeight());
+                Gdiplus::RectF destination(0,0,app->banner->GetWidth()*ratio,app->banner->GetHeight()*ratio);
+                Gdiplus::ImageAttributes attributes;
+                attributes.SetWrapMode(Gdiplus::WrapModeTileFlipXY);
+                graphics.DrawImage(app->banner.get(),destination,0,0,static_cast<float>(app->banner->GetWidth()),
+                    static_cast<float>(app->banner->GetHeight()),Gdiplus::UnitPixel,&attributes);
                 return TRUE;
             }
             if (item->CtlType == ODT_BUTTON) { app->DrawButton(*item); return TRUE; }
@@ -665,6 +675,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         app.scalePercent = 0;
         scalingWarning = DecodeText(error.what()) + L"\r\n\r\nUsing Windows scaling. Correct ScalePercent in Settings.";
     }
+    try {
+        const auto ini = app.directory / L"RainRegExp.ini";
+        app.darkMode = ParseDarkMode(std::filesystem::exists(ini) ? ReadText(ini) : L"");
+    } catch (const std::exception& error) {
+        app.darkMode = DarkMode::Auto;
+        if (!scalingWarning.empty()) scalingWarning += L"\r\n\r\n";
+        scalingWarning += DecodeText(error.what()) + L"\r\n\r\nFollowing the Windows theme. Correct DarkMode in Settings.";
+    }
     WNDCLASSEXW type{sizeof(type)};
     type.lpfnWndProc = WindowProc; type.hInstance = instance; type.lpszClassName = L"RainRegExp.Cpp.Window";
     type.hCursor = LoadCursorW(nullptr, IDC_ARROW); type.hbrBackground = nullptr;
@@ -676,13 +694,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRectExForDpi(&rect, style, FALSE, 0, dpi);
     int width = rect.right - rect.left, height = rect.bottom - rect.top;
-    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.1", style,
+    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.2", style,
         (GetSystemMetrics(SM_CXSCREEN) - width) / 2, (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
         width, height, nullptr, nullptr, instance, &app);
     if (!window) { if (singleton) CloseHandle(singleton); return 1; }
     app.ApplyScale(app.scalePercent);
     ShowWindow(window, show); UpdateWindow(window);
-    if (!scalingWarning.empty()) MessageBoxW(window,scalingWarning.c_str(),L"RainRegExp scaling",MB_OK | MB_ICONWARNING);
+    if (!scalingWarning.empty()) MessageBoxW(window,scalingWarning.c_str(),L"RainRegExp settings",MB_OK | MB_ICONWARNING);
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         // Dialog navigation without treating Escape as a request to close.
