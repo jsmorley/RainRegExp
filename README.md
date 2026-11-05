@@ -109,7 +109,8 @@ bangs and child measure processing are not evaluated by this standalone tool.
 Enter a URL and Connect, or Browse for a local file. Enter a pattern and click
 Parse. Copy puts the expression on the Unicode clipboard. Search finds the
 next case-insensitive occurrence in the HTML; after reaching the end it
-beeps and resets, like the original. Wrap buttons preserve text and selection.
+beeps and resets, like the original. Wrap buttons preserve text and selection;
+a tinted fill and accent border show when wrapping is enabled.
 The Notepad tab is editable. The RegExp tab contains the original hints plus
 WebParser compatibility notes.
 

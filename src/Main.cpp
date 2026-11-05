@@ -325,9 +325,9 @@ struct App {
         const bool disabled = (item.itemState & ODS_DISABLED) != 0;
         const bool pressed = (item.itemState & ODS_SELECTED) != 0;
         const bool wrapped = (item.CtlID == WrapInput && wrapInput) || (item.CtlID == WrapPattern && wrapPattern);
-        COLORREF fill = primary ? theme.accent : (pressed ? theme.pressed : (hoveredButton == item.hwndItem ? theme.hover : theme.surface));
+        COLORREF fill = primary ? theme.accent : (pressed || wrapped ? theme.pressed : (hoveredButton == item.hwndItem ? theme.hover : theme.surface));
         COLORREF edge = primary || wrapped ? theme.accent : theme.border;
-        COLORREF foreground = primary ? theme.onAccent : (wrapped ? theme.accent : theme.text);
+        COLORREF foreground = primary ? theme.onAccent : (wrapped ? (theme.highContrast ? theme.onAccent : theme.accent) : theme.text);
         if (disabled) { fill = theme.background; edge = theme.border; foreground = theme.muted; }
         else if (primary && pressed && !theme.highContrast) fill = theme.dark ? RGB(135,195,250) : RGB(30,93,153);
         else if (primary && hoveredButton == item.hwndItem && !theme.highContrast) fill = theme.dark ? RGB(125,185,245) : RGB(48,131,207);
