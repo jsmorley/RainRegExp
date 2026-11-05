@@ -362,6 +362,13 @@ struct App {
         if (message == WM_ERASEBKGND) return 1;
         if (message == WM_PAINT) {
             PAINTSTRUCT paint{}; HDC dc = BeginPaint(tab,&paint);
+            // Page controls are siblings of the tab. Protect their client and border
+            // areas when focus or a repeated click repaints the entire tab surface.
+            for (const auto& control : app->controls) if (control.page >= 0 && IsWindowVisible(control.window)) {
+                RECT bounds{}; GetWindowRect(control.window,&bounds);
+                MapWindowPoints(nullptr,tab,reinterpret_cast<POINT*>(&bounds),2);
+                ExcludeClipRect(dc,bounds.left,bounds.top,bounds.right,bounds.bottom);
+            }
             RECT client{}; GetClientRect(tab,&client); FillRect(dc,&client,app->theme.backgroundBrush);
             modern::Round(dc,client,app->Scale(10),app->theme.surface,app->theme.border);
             int selected = TabCtrl_GetCurSel(tab);
