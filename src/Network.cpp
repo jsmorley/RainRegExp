@@ -60,6 +60,9 @@ static std::wstring Setting(const std::wstring& contents, const wchar_t* key, co
 NetworkOptions ReadNetworkOptions(const std::filesystem::path& ini) {
     // Decode explicitly: the Win32 profile API does not support UTF-8 INI files.
     const auto contents = std::filesystem::exists(ini) ? ReadText(ini) : L"";
+    return ParseNetworkOptions(contents);
+}
+NetworkOptions ParseNetworkOptions(const std::wstring& contents) {
     NetworkOptions options;
     options.proxy = Setting(contents, L"ProxyServer", L"/auto");
     if (options.proxy.empty()) options.proxy = L"/auto";

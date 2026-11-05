@@ -19,6 +19,15 @@ The app follows the Windows light/dark appearance and uses system colors in
 high-contrast mode. The familiar panel arrangement and parsing, networking,
 clipboard, file and session behavior are retained. It remains a portable EXE.
 
+## Settings tab
+
+The Settings tab edits the `RainRegExp.ini` beside the running executable.
+Save validates the supported connection options, backs up the current file
+as `RainRegExp.ini.bak`, and writes UTF-8 with BOM. Saved options take effect
+on the next Connect without restarting. Reset puts the shipped defaults in
+the editor; click Save to apply them. Exit returns to Welcome. Unsaved edits
+are marked with an asterisk, and Exit/app close offer Save, Discard, or Cancel.
+Switching to another tab preserves unsaved edits.
 ## Connection settings
 
 All settings are read from `[WebParser]` in the INI beside the executable

@@ -75,6 +75,11 @@ int main() {
         bool rejected = false;
         try { ParseFlags(L"Unknown"); } catch (const std::exception&) { rejected = true; }
         Check(rejected, "Invalid flag diagnosed");
+        rejected = false;
+        try { ParseNetworkOptions(L"[WebParser]\r\nFlags=Typo\r\n"); } catch (const std::exception&) { rejected = true; }
+        Check(rejected, "Settings editor validates invalid flags before saving");
+        options = ParseNetworkOptions(L"; comment kept by editor\r\n[WebParser]\r\nUserAgent=Edited settings\r\nProxyServer=/none\r\nHeader=X-Edited: yes\r\nFlags=NoCookies\r\n");
+        Check(options.userAgent == L"Edited settings" && options.proxy == L"/none" && options.headers == L"X-Edited: yes\r\n\r\n" && options.flags == (INTERNET_FLAG_RESYNCHRONIZE | INTERNET_FLAG_NO_COOKIES), "Editor validation uses the same option parser as Connect");
         WriteText(directory / L"options.ini", L"[WebParser]\r\nUserAgent=Changed/5.1\r\n");
         Check(ReadNetworkOptions(directory / L"options.ini").userAgent == L"Changed/5.1", "Options reread without restart");
         const std::wstring iniText = L"[webparser]\r\nUserAgent=EncodingTest/5.1\r\nProxyServer=/none\r\nHeader=X-Name: café\r\n";

@@ -2,6 +2,7 @@
 #pragma code_page(65001)
 1 ICON "rX.ico"
 5 RCDATA "RainRegExp.png"
+6 RCDATA "../RainRegExp.ini"
 3 RCDATA "RainRegApp.txt"
 4 RCDATA "RainRegExp.txt"
 1 RT_MANIFEST "RainRegExp.manifest"

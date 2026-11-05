@@ -11,6 +11,7 @@ struct NetworkOptions {
     DWORD flags = INTERNET_FLAG_RESYNCHRONIZE;
 };
 DWORD ParseFlags(const std::wstring& text);
+NetworkOptions ParseNetworkOptions(const std::wstring& contents);
 NetworkOptions ReadNetworkOptions(const std::filesystem::path& ini);
 std::wstring Fetch(const std::wstring& url, const NetworkOptions& options, const std::atomic<bool>& cancelled);
 }

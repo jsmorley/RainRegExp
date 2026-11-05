@@ -22,7 +22,7 @@ using namespace rainregexp;
 namespace {
 enum Id { Url = 100, Connect, Browse, SearchText, Search, Input, SaveInput, WrapInput,
     Pattern, Parse, Copy, WrapPattern, Save, Load, Output, Tabs, Notes, Help, Link, Banner, Status, Engine, CaptureCount,
-    HtmlHeading, PatternHeading, OutputHeading };
+    HtmlHeading, PatternHeading, OutputHeading, SettingsEdit, SettingsLabel, SettingsSave, SettingsReset, SettingsExit };
 constexpr UINT Completed = WM_APP + 1;
 constexpr DWORD EditStyle = WS_TABSTOP | ES_MULTILINE | ES_WANTRETURN | ES_AUTOVSCROLL | WS_VSCROLL;
 struct Control { HWND window; int x, y, width, height; int page; };
@@ -44,6 +44,8 @@ struct App {
     std::wstring completedText;
     int completedTarget = Output;
     int completedCaptures = -1;
+    bool settingsLoaded = false, settingsDirty = false;
+    std::wstring savedSettings;
     ~App() {
         closing = true;
         if (worker.joinable()) worker.join();
@@ -81,8 +83,8 @@ struct App {
         controls.push_back({control, x, y, width, height, page});
         return control;
     }
-    void Button(const wchar_t* title, int id, int x, int y, int width, int height, const wchar_t* tip) {
-        HWND control = Add(L"BUTTON", title, WS_TABSTOP | BS_OWNERDRAW, id, x, y, width, height);
+    void Button(const wchar_t* title, int id, int x, int y, int width, int height, const wchar_t* tip, int page = -1) {
+        HWND control = Add(L"BUTTON", title, WS_TABSTOP | BS_OWNERDRAW, id, x, y, width, height, page);
         TOOLINFOW info{sizeof(info)};
         info.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
         info.hwnd = window;
@@ -113,7 +115,7 @@ struct App {
         for (const auto& control : controls) {
             int id = GetDlgCtrlID(control.window);
             HFONT selected = id == Link ? linkFont : (id == HtmlHeading || id == PatternHeading || id == OutputHeading ? headingFont :
-                (id == Input || id == Pattern || id == Output ? codeFont : (id == Status || id == Engine || id == CaptureCount ? smallFont : font)));
+                (id == Input || id == Pattern || id == Output || id == SettingsEdit ? codeFont : (id == Status || id == Engine || id == CaptureCount || id == SettingsLabel ? smallFont : font)));
             SendMessageW(control.window, WM_SETFONT, reinterpret_cast<WPARAM>(selected), TRUE);
             if (id == Url || id == SearchText)
                 SetWindowPos(control.window,nullptr,0,0,0,0,SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -159,7 +161,7 @@ struct App {
         Add(WC_TABCONTROLW, L"", WS_TABSTOP | WS_CLIPSIBLINGS | TCS_FIXEDWIDTH, Tabs, 490, 494, 452, 246);
         SetWindowSubclass(Get(Tabs), TabProc, 1, reinterpret_cast<DWORD_PTR>(this));
         SendMessageW(Get(Tabs), TCM_SETITEMSIZE, 0, MAKELPARAM(Scale(91), Scale(45)));
-        for (auto title : {L"Welcome", L"Notepad", L"RegExp"}) {
+        for (auto title : {L"Welcome", L"Notepad", L"RegExp", L"Settings"}) {
             TCITEMW item{}; item.mask = TCIF_TEXT; item.pszText = const_cast<wchar_t*>(title);
             TabCtrl_InsertItem(Get(Tabs), TabCtrl_GetItemCount(Get(Tabs)), &item);
         }
@@ -177,6 +179,11 @@ struct App {
         Add(L"STATIC", L"rainmeter.net", SS_NOTIFY | SS_RIGHT, Link, 809, 709, 110, 20, 0);
         Edit(Notes, L"", 512, 559, 408, 166, 0, 1);
         Edit(Help, L"", 512, 559, 408, 166, ES_READONLY, 2);
+        Add(L"STATIC", L"RainRegExp.ini", SS_CENTERIMAGE, SettingsLabel, 512, 551, 175, 28, 3);
+        Edit(SettingsEdit, L"", 512, 592, 408, 131, ES_AUTOHSCROLL | WS_HSCROLL, 3);
+        Button(L"Save", SettingsSave, 694, 551, 66, 28, L"Validate and save settings; used on the next connection", 3);
+        Button(L"Reset", SettingsReset, 768, 551, 72, 28, L"Restore shipped defaults in the editor; Save to apply", 3);
+        Button(L"Exit", SettingsExit, 848, 551, 72, 28, L"Return to the Welcome tab", 3);
         Add(L"STATIC", L"Ready", 0, Status, 20, 748, 440, 20);
         Add(L"STATIC", L"PCRE 8.45 · WebParser compatible", SS_RIGHT, Engine, 550, 748, 390, 20);
         Set(Notes, ResourceText(3));
@@ -199,9 +206,58 @@ struct App {
     }
     void SelectPage() {
         int page = TabCtrl_GetCurSel(Get(Tabs));
+        if (page == 3 && !settingsLoaded) LoadSettings();
         for (const auto& c : controls) if (c.page >= 0) ShowWindow(c.window, c.page == page ? SW_SHOW : SW_HIDE);
         InvalidateRect(Get(Tabs), nullptr, FALSE);
         RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    }
+    std::filesystem::path SettingsPath() const { return directory / L"RainRegExp.ini"; }
+    static std::wstring SettingsEditorText(const std::wstring& text) {
+        std::wstring result;
+        for (size_t i = 0; i < text.size(); ++i) {
+            if (text[i] == L'\r') {
+                result += L"\r\n";
+                if (i + 1 < text.size() && text[i + 1] == L'\n') ++i;
+            } else if (text[i] == L'\n') result += L"\r\n";
+            else result += text[i];
+        }
+        return result;
+    }
+    void SettingsChanged() {
+        settingsDirty = settingsLoaded && Text(SettingsEdit) != savedSettings;
+        Set(SettingsLabel, settingsDirty ? L"RainRegExp.ini *" : L"RainRegExp.ini");
+    }
+    void LoadSettings() {
+        const auto path = SettingsPath();
+        auto contents = SettingsEditorText(std::filesystem::exists(path) ? ReadText(path) : ResourceText(6));
+        settingsLoaded = false;
+        Set(SettingsEdit, contents);
+        savedSettings = contents;
+        settingsLoaded = true;
+        SettingsChanged();
+    }
+    void SaveSettingsToDisk() {
+        const auto contents = Text(SettingsEdit);
+        // Validate before touching the working INI or its backup.
+        ParseNetworkOptions(contents);
+        const auto path = SettingsPath();
+        auto backup = path; backup += L".bak";
+        if (std::filesystem::exists(path) && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
+            throw std::runtime_error("Unable to back up RainRegExp.ini. Settings were not saved.");
+        WriteText(path, contents);
+        savedSettings = contents;
+        settingsLoaded = true;
+        SettingsChanged();
+        Set(Status,L"Settings saved — used on the next connection");
+    }
+    bool ConfirmSettingsExit() {
+        SettingsChanged();
+        if (!settingsDirty) return true;
+        int choice = MessageBoxW(window,L"Save your changes to RainRegExp.ini?",L"Unsaved settings",MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (choice == IDCANCEL) return false;
+        if (choice == IDYES) SaveSettingsToDisk();
+        else { settingsLoaded = false; settingsDirty = false; Set(SettingsLabel,L"RainRegExp.ini"); }
+        return true;
     }
     void TabBackground(HWND control, HDC dc) const {
         RECT rect{}; GetClientRect(control, &rect); FillRect(dc, &rect, theme.surfaceBrush);
@@ -227,7 +283,7 @@ struct App {
         }
     }
     void DrawButton(const DRAWITEMSTRUCT& item) {
-        const bool primary = item.CtlID == Connect || item.CtlID == Parse;
+        const bool primary = item.CtlID == Connect || item.CtlID == Parse || item.CtlID == SettingsSave;
         const bool disabled = (item.itemState & ODS_DISABLED) != 0;
         const bool pressed = (item.itemState & ODS_SELECTED) != 0;
         const bool wrapped = (item.CtlID == WrapInput && wrapInput) || (item.CtlID == WrapPattern && wrapPattern);
@@ -420,6 +476,15 @@ struct App {
             break;
         }
         case Copy: Clipboard(); break;
+        case SettingsSave: SaveSettingsToDisk(); break;
+        case SettingsReset:
+            Set(SettingsEdit,SettingsEditorText(ResourceText(6)));
+            SettingsChanged();
+            Set(Status,L"Defaults restored in editor — Save to apply");
+            break;
+        case SettingsExit:
+            if (ConfirmSettingsExit()) { TabCtrl_SetCurSel(Get(Tabs),0); SelectPage(); SetFocus(Get(Tabs)); Set(Status,L"Ready"); }
+            break;
         case Search: Find(); break;
         case WrapInput: Wrap(Input, wrapInput); break;
         case WrapPattern: Wrap(Pattern, wrapPattern); break;
@@ -484,6 +549,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         case WM_THEMECHANGED:
         case WM_SYSCOLORCHANGE: app->RefreshTheme(); return 0;
         case WM_COMMAND:
+            if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == SettingsEdit) app->SettingsChanged();
             if (HIWORD(wParam) == EN_CHANGE && (LOWORD(wParam) == SearchText || LOWORD(wParam) == Input)) app->searchOffset = 0;
             if (HIWORD(wParam) == BN_CLICKED) app->Command(LOWORD(wParam));
             return 0;
@@ -529,7 +595,9 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             SetWindowPos(window, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
             app->Layout(); return 0;
         }
-        case WM_CLOSE: app->closing = true; DestroyWindow(window); return 0;
+        case WM_CLOSE:
+            if (!app->ConfirmSettingsExit()) return 0;
+            app->closing = true; DestroyWindow(window); return 0;
         case WM_DESTROY: PostQuitMessage(0); return 0;
         }
     } catch (const std::exception& error) {
