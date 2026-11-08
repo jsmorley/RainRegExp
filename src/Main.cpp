@@ -617,7 +617,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             RECT frame{};
             UINT dpi = GetDpiForWindow(window); if (!dpi) dpi = GetDpiForSystem();
             AdjustWindowRectExForDpi(&frame,static_cast<DWORD>(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,0,dpi);
-            limits->ptMinTrackSize = {BaseClientWidth+frame.right-frame.left,BaseClientHeight+frame.bottom-frame.top};
+            limits->ptMinTrackSize = {MulDiv(BaseClientWidth,75,100)+frame.right-frame.left,MulDiv(BaseClientHeight,75,100)+frame.bottom-frame.top};
             limits->ptMaxTrackSize = {BaseClientWidth*5+frame.right-frame.left,BaseClientHeight*5+frame.bottom-frame.top};
             return 0;
         }

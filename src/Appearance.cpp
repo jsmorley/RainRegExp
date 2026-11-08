@@ -4,10 +4,10 @@
 #include <stdexcept>
 namespace rainregexp {
 static void InvalidScale() {
-    throw std::runtime_error("ScalePercent must be Auto or a whole number from 100 to 500.");
+    throw std::runtime_error("ScalePercent must be Auto or a whole number from 75 to 500.");
 }
 static bool Allowed(int percent) {
-    return percent >= 100 && percent <= 500;
+    return percent >= 75 && percent <= 500;
 }
 static std::wstring AppearanceValue(const std::wstring& contents, const wchar_t* key) {
     auto value = IniValue(contents,L"RainRegExp",key,L"Auto");
@@ -50,7 +50,7 @@ int ConstrainResize(RECT& bounds, UINT edge, int currentPercent, int frameWidth,
     const bool vertical = edge == WMSZ_TOP || edge == WMSZ_BOTTOM;
     const bool corner = edge != WMSZ_LEFT && edge != WMSZ_RIGHT && !vertical;
     const bool useHeight = vertical || (corner && std::abs(fromHeight-currentPercent) > std::abs(fromWidth-currentPercent));
-    const int percent = std::clamp(useHeight ? fromHeight : fromWidth,100,500);
+    const int percent = std::clamp(useHeight ? fromHeight : fromWidth,75,500);
     const int width = MulDiv(BaseClientWidth,percent,100)+frameWidth;
     const int height = MulDiv(BaseClientHeight,percent,100)+frameHeight;
     if (edge == WMSZ_LEFT || edge == WMSZ_TOPLEFT || edge == WMSZ_BOTTOMLEFT) bounds.left = bounds.right-width;

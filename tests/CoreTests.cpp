@@ -47,20 +47,20 @@ int main() {
         }
         Check(MulDiv(960,LayoutDpi(192,100),96) == 960, "100 percent keeps base width on 200 percent Windows");
         Check(MulDiv(960,LayoutDpi(192,0),96) == 1920, "Auto uses Windows 200 percent width");
-        for (int percent = 100; percent <= 500; ++percent) {
-            Check(ParseScalePercent(L"[RainRegExp]\nScalePercent="+std::to_wstring(percent)) == percent,"Every whole percent from 100 through 500 is accepted");
+        for (int percent = 75; percent <= 500; ++percent) {
+            Check(ParseScalePercent(L"[RainRegExp]\nScalePercent="+std::to_wstring(percent)) == percent,"Every whole percent from 75 through 500 is accepted");
             for (UINT monitorDpi : {96U,120U,144U,192U})
                 Check(ScaleLogical(960,monitorDpi,percent) == MulDiv(960,percent,100),"Custom scale geometry uses exact percentages independent of Windows");
         }
         Check(ScaleLogical(960,192,113) == 1085,"113 percent avoids intermediate DPI rounding");
         Check(ScaleLogical(960,192,0) == 1920,"Auto geometry follows Windows DPI");
-        for (const auto* value : {L"0",L"99",L"501",L"600",L"-100",L"100%",L"125.0",L"Default",L"abc",L"999999999999"}) {
+        for (const auto* value : {L"0",L"74",L"501",L"600",L"-100",L"100%",L"125.0",L"Default",L"abc",L"999999999999"}) {
             bool rejectedScale = false;
             try { ParseScalePercent(L"[RainRegExp]\nScalePercent=" + std::wstring(value)); } catch(const std::exception&) { rejectedScale = true; }
             Check(rejectedScale, "Invalid scaling rejected");
         }
         for (UINT edge = WMSZ_LEFT; edge <= WMSZ_BOTTOMRIGHT; ++edge) {
-            for (int percent : {100,113,151,177,275,499,500}) {
+            for (int percent : {75,76,87,99,100,113,151,177,275,499,500}) {
                 RECT bounds{100,200,100+MulDiv(BaseClientWidth,percent,100)+16,200+MulDiv(BaseClientHeight,percent,100)+39};
                 const RECT original = bounds;
                 Check(ConstrainResize(bounds,edge,100,16,39) == percent,"Every edge and corner selects the requested whole scale");
@@ -71,7 +71,7 @@ int main() {
             }
         }
         RECT tiny{0,0,100,100}, huge{0,0,10000,10000};
-        Check(ConstrainResize(tiny,WMSZ_BOTTOMRIGHT,100,16,39) == 100,"Drag has a 100 percent minimum");
+        Check(ConstrainResize(tiny,WMSZ_BOTTOMRIGHT,100,16,39) == 75,"Drag has a 75 percent minimum");
         Check(ConstrainResize(huge,WMSZ_BOTTOMRIGHT,100,16,39) == 500,"Drag has a 500 percent maximum");
         RECT verticalCorner{0,0,BaseClientWidth+16,MulDiv(BaseClientHeight,125,100)+39};
         Check(ConstrainResize(verticalCorner,WMSZ_BOTTOMRIGHT,100,16,39) == 125,"Corner dragging follows the dimension that changed most");
