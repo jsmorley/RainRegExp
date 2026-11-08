@@ -38,7 +38,7 @@ int main() {
         Check(ParseScalePercent(L"[RainRegExp]\nScalePercent=Auto\n") == 0, "Explicit Auto scaling");
         Check(ParseScalePercent(L"[rainregexp]\nscalepercent=\" auto \"\n") == 0, "Quoted Auto scaling");
         Check(ParseScalePercent(L"[RainRegExp]\nScalePercent=\n") == 0, "Blank scale follows Windows");
-        for (int percent : ScalePresets) {
+        for (int percent : {100,125,150,175,200,225,250,300,350,400,450,500}) {
             Check(ParseScalePercent(L"[RainRegExp]\nScalePercent=" + std::to_wstring(percent)) == percent, "Windows scale preset accepted");
             for (UINT monitorDpi : {96U,120U,144U,168U,192U,240U,384U}) {
                 Check(LayoutDpi(monitorDpi,percent) == static_cast<UINT>(MulDiv(96,percent,100)), "Explicit scaling independent of Windows DPI");
@@ -47,17 +47,17 @@ int main() {
         }
         Check(MulDiv(960,LayoutDpi(192,100),96) == 960, "100 percent keeps base width on 200 percent Windows");
         Check(MulDiv(960,LayoutDpi(192,0),96) == 1920, "Auto uses Windows 200 percent width");
-        for (int percent = 100; percent <= 150; ++percent) {
-            Check(ParseScalePercent(L"[RainRegExp]\nScalePercent="+std::to_wstring(percent)) == percent,"Every whole percent from 100 through 150 is accepted");
+        for (int percent = 100; percent <= 500; ++percent) {
+            Check(ParseScalePercent(L"[RainRegExp]\nScalePercent="+std::to_wstring(percent)) == percent,"Every whole percent from 100 through 500 is accepted");
             for (UINT monitorDpi : {96U,120U,144U,192U})
                 Check(ScaleLogical(960,monitorDpi,percent) == MulDiv(960,percent,100),"Custom scale geometry uses exact percentages independent of Windows");
         }
         Check(ScaleLogical(960,192,113) == 1085,"113 percent avoids intermediate DPI rounding");
         Check(ScaleLogical(960,192,0) == 1920,"Auto geometry follows Windows DPI");
-        for (const auto* value : {L"0",L"99",L"151",L"160",L"180",L"275",L"600",L"-100",L"100%",L"125.0",L"Default",L"abc",L"999999999999"}) {
+        for (const auto* value : {L"0",L"99",L"501",L"600",L"-100",L"100%",L"125.0",L"Default",L"abc",L"999999999999"}) {
             bool rejectedScale = false;
             try { ParseScalePercent(L"[RainRegExp]\nScalePercent=" + std::wstring(value)); } catch(const std::exception&) { rejectedScale = true; }
-            Check(rejectedScale, "Non-preset scaling rejected");
+            Check(rejectedScale, "Invalid scaling rejected");
         }
         Check(std::string(pcre16_version()).find("8.45") == 0, "Exact PCRE version");
         auto result = Match(L"<TITLE>Hello\nWorld</TITLE><item>First</item><item>Second</item>", L"(?siU)<title>(.*)</title>.*<item>(.*)</item>");
@@ -106,9 +106,9 @@ int main() {
         Check(DecodeText(std::string("\xfe\xff\x00\x41", 4)) == L"A", "UTF-16 BE input");
         auto options = ReadNetworkOptions(directory / L"missing.ini");
         Check(options.proxy == L"/auto" && options.userAgent == L"Rainmeter WebParser plugin" && options.flags == INTERNET_FLAG_RESYNCHRONIZE, "WebParser network defaults");
-        WriteText(directory / L"options.ini", L"[WebParser]\r\nProxyServer=/none\r\nUserAgent=Test/5.2\r\nHeader=Accept: text/html\r\nHeader2=X-Test: yes\r\nHeader4=Ignored: yes\r\nFlags=ForceReload|NoCookies|NoCacheWrite\r\n");
+        WriteText(directory / L"options.ini", L"[WebParser]\r\nProxyServer=/none\r\nUserAgent=Test/5.3\r\nHeader=Accept: text/html\r\nHeader2=X-Test: yes\r\nHeader4=Ignored: yes\r\nFlags=ForceReload|NoCookies|NoCacheWrite\r\n");
         options = ReadNetworkOptions(directory / L"options.ini");
-        Check(options.proxy == L"/none" && options.userAgent == L"Test/5.2", "Configured proxy and user agent");
+        Check(options.proxy == L"/none" && options.userAgent == L"Test/5.3", "Configured proxy and user agent");
         Check(options.headers == L"Accept: text/html\r\nX-Test: yes\r\n\r\n", "Consecutive numbered headers");
         Check(options.flags == (INTERNET_FLAG_RESYNCHRONIZE | INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_CACHE_WRITE), "Combined flags retain Resync like WebParser");
         Check(ParseFlags(L"Hyperlink|TempFile|NoAuth|PragmaNoCache|Secure|IgnoreCertName|IgnoreCertDate|IgnoreHTTPRedirect|IgnoreHTTPSRedirect") ==
@@ -123,9 +123,9 @@ int main() {
         Check(rejected, "Settings editor validates invalid flags before saving");
         options = ParseNetworkOptions(L"; comment kept by editor\r\n[WebParser]\r\nUserAgent=Edited settings\r\nProxyServer=/none\r\nHeader=X-Edited: yes\r\nFlags=NoCookies\r\n");
         Check(options.userAgent == L"Edited settings" && options.proxy == L"/none" && options.headers == L"X-Edited: yes\r\n\r\n" && options.flags == (INTERNET_FLAG_RESYNCHRONIZE | INTERNET_FLAG_NO_COOKIES), "Editor validation uses the same option parser as Connect");
-        WriteText(directory / L"options.ini", L"[WebParser]\r\nUserAgent=Changed/5.2\r\n");
-        Check(ReadNetworkOptions(directory / L"options.ini").userAgent == L"Changed/5.2", "Options reread without restart");
-        const std::wstring iniText = L"[webparser]\r\nUserAgent=EncodingTest/5.2\r\nProxyServer=/none\r\nHeader=X-Name: café\r\n";
+        WriteText(directory / L"options.ini", L"[WebParser]\r\nUserAgent=Changed/5.3\r\n");
+        Check(ReadNetworkOptions(directory / L"options.ini").userAgent == L"Changed/5.3", "Options reread without restart");
+        const std::wstring iniText = L"[webparser]\r\nUserAgent=EncodingTest/5.3\r\nProxyServer=/none\r\nHeader=X-Name: café\r\n";
         for (bool little : {true, false}) {
             auto file = directory / (little ? L"utf16le.ini" : L"utf16be.ini");
             {
@@ -134,14 +134,14 @@ int main() {
                 for (auto c : iniText) { stream.put(static_cast<char>(little ? c & 255 : c >> 8)); stream.put(static_cast<char>(little ? c >> 8 : c & 255)); }
             }
             options = ReadNetworkOptions(file);
-            Check(options.userAgent == L"EncodingTest/5.2" && options.proxy == L"/none" && options.headers == L"X-Name: café\r\n\r\n", "UTF-16 INI decoding");
+            Check(options.userAgent == L"EncodingTest/5.3" && options.proxy == L"/none" && options.headers == L"X-Name: café\r\n\r\n", "UTF-16 INI decoding");
         }
         {
             std::ofstream stream(directory / L"utf8.ini", std::ios::binary);
-            stream << "[WebParser]\nUserAgent=Utf8/5.2\nHeader=X-Name: caf\xc3\xa9\n";
+            stream << "[WebParser]\nUserAgent=Utf8/5.3\nHeader=X-Name: caf\xc3\xa9\n";
         }
         options = ReadNetworkOptions(directory / L"utf8.ini");
-        Check(options.userAgent == L"Utf8/5.2" && options.headers == L"X-Name: café\r\n\r\n", "UTF-8 without BOM");
+        Check(options.userAgent == L"Utf8/5.3" && options.headers == L"X-Name: café\r\n\r\n", "UTF-8 without BOM");
         std::filesystem::remove_all(directory);
         std::cout << checks << " checks passed\n";
         return 0;

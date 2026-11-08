@@ -701,7 +701,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     AdjustWindowRectExForDpi(&rect, style, FALSE, 0, dpi);
     int width = rect.right - rect.left, height = rect.bottom - rect.top;
-    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.2", style,
+    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.3", style,
         (GetSystemMetrics(SM_CXSCREEN) - width) / 2, (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
         width, height, nullptr, nullptr, instance, &app);
     if (!window) { if (singleton) CloseHandle(singleton); return 1; }

@@ -2,12 +2,10 @@
 #pragma once
 #include "Core.h"
 #include <windows.h>
-#include <array>
 namespace rainregexp {
 enum class DarkMode { Auto, Enabled, Disabled };
 DarkMode ParseDarkMode(const std::wstring& contents);
 bool ResolveDarkMode(DarkMode mode, bool windowsDark, bool highContrast);
-inline constexpr std::array<int,12> ScalePresets{100,125,150,175,200,225,250,300,350,400,450,500};
 // Zero internally means Auto, following the DPI of the window's monitor.
 int ParseScalePercent(const std::wstring& contents);
 UINT LayoutDpi(UINT windowsDpi, int scalePercent);

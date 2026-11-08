@@ -4,10 +4,10 @@
 #include <stdexcept>
 namespace rainregexp {
 static void InvalidScale() {
-    throw std::runtime_error("ScalePercent must be Auto, a whole number from 100 to 150, or 175, 200, 225, 250, 300, 350, 400, 450, 500.");
+    throw std::runtime_error("ScalePercent must be Auto or a whole number from 100 to 500.");
 }
 static bool Allowed(int percent) {
-    return (percent >= 100 && percent <= 150) || std::find(ScalePresets.begin(),ScalePresets.end(),percent) != ScalePresets.end();
+    return percent >= 100 && percent <= 500;
 }
 static std::wstring AppearanceValue(const std::wstring& contents, const wchar_t* key) {
     auto value = IniValue(contents,L"RainRegExp",key,L"Auto");

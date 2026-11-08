@@ -1,4 +1,4 @@
-# RainRegExp 5.2
+# RainRegExp 5.3
 
 Native C++ / Win32 replacement for RainRegExp.au3. Copyright © 2026 Jeffrey
 Morley. Licensed under CC BY-NC-SA 3.0 Unported; see COPYRIGHT.txt and
@@ -6,7 +6,7 @@ LICENSE.txt. PCRE keeps its original license.
 
 ## Run
 
-Current release: **5.2**. Portable package: **RainRegExp_5.2.zip**.
+Current release: **5.3**. Portable package: **RainRegExp_5.3.zip**.
 
 Download the portable ZIP from [GitHub Releases](https://github.com/jsmorley/RainRegExp/releases), extract it, and run `RainRegExp.exe`. Keep `RainRegExp.ini` beside it.
 
@@ -54,8 +54,7 @@ ScalePercent=Auto
 ```
 
 `Auto` (also the default when missing or blank) follows the Windows scaling
-of the monitor containing the app. Explicit values may be any whole number from **100 through 150**, then
-**175, 200, 225, 250, 300, 350, 400, 450, or 500**.
+of the monitor containing the app. Explicit values may be any whole number from **100 through 500**.
 For example, `ScalePercent=100` keeps the app content at its 100% pixel size
 even when Windows is at 125%, 150% or 200%. The value is an absolute scale,
 not a multiplier on Windows scaling. Windows still controls its title bar,
