@@ -40,7 +40,7 @@ struct App {
     int scalePercent = 0;
     std::filesystem::path directory, browseDirectory;
     std::vector<Control> controls;
-    bool wrapInput = false, wrapPattern = false, busy = false;
+    bool wrapInput = false, wrapPattern = false, busy = false, resizedByDrag = false;
     int searchOffset = 0;
     std::thread worker;
     std::atomic<bool> closing{false};
@@ -162,6 +162,35 @@ struct App {
         SetWindowPos(window,nullptr,x,y,bounds.right-bounds.left,bounds.bottom-bounds.top,SWP_NOZORDER | SWP_NOACTIVATE);
         Layout();
         RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    }
+    void DragResize(RECT& bounds, UINT edge) {
+        RECT frame{0,0,0,0};
+        AdjustWindowRectExForDpi(&frame,static_cast<DWORD>(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,0,GetDpiForWindow(window));
+        const int current = scalePercent ? scalePercent : MulDiv(dpi,100,96);
+        const int percent = ConstrainResize(bounds,edge,current,frame.right-frame.left,frame.bottom-frame.top);
+        if (percent != current) {
+            resizedByDrag = true;
+            scalePercent = percent;
+            dpi = LayoutDpi(GetDpiForWindow(window),percent);
+            Fonts();
+        }
+    }
+    void SaveDraggedScale() {
+        if (!resizedByDrag) return;
+        resizedByDrag = false;
+        const auto path = SettingsPath();
+        const auto contents = SetScalePercent(std::filesystem::exists(path) ? ReadText(path) : ResourceText(6),scalePercent);
+        auto backup = path; backup += L".bak";
+        if (std::filesystem::exists(path) && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
+            throw std::runtime_error("Unable to back up RainRegExp.ini. The dragged scale was not saved.");
+        WriteText(path,contents);
+        if (settingsLoaded) {
+            const auto editor = SetScalePercent(Text(SettingsEdit),scalePercent);
+            savedSettings = SetScalePercent(savedSettings,scalePercent);
+            Set(SettingsEdit,editor);
+            SettingsChanged();
+        }
+        Set(Status,L"ScalePercent="+std::to_wstring(scalePercent)+L" saved");
     }
     void Init() {
         dpi = LayoutDpi(GetDpiForWindow(window),scalePercent);
@@ -578,6 +607,26 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
     try {
         switch(message) {
         case WM_CREATE: app->Init(); return 0;
+        case WM_ENTERSIZEMOVE: app->resizedByDrag = false; return 0;
+        case WM_SIZING:
+            app->DragResize(*reinterpret_cast<RECT*>(lParam),static_cast<UINT>(wParam));
+            return TRUE;
+        case WM_EXITSIZEMOVE: app->SaveDraggedScale(); return 0;
+        case WM_GETMINMAXINFO: {
+            auto limits = reinterpret_cast<MINMAXINFO*>(lParam);
+            RECT frame{};
+            UINT dpi = GetDpiForWindow(window); if (!dpi) dpi = GetDpiForSystem();
+            AdjustWindowRectExForDpi(&frame,static_cast<DWORD>(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,0,dpi);
+            limits->ptMinTrackSize = {BaseClientWidth+frame.right-frame.left,BaseClientHeight+frame.bottom-frame.top};
+            limits->ptMaxTrackSize = {BaseClientWidth*5+frame.right-frame.left,BaseClientHeight*5+frame.bottom-frame.top};
+            return 0;
+        }
+        case WM_SIZE:
+            if (wParam != SIZE_MINIMIZED && !app->controls.empty()) {
+                app->Layout();
+                RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+            }
+            return 0;
         case WM_ERASEBKGND: return 1;
         case WM_PAINT: {
             PAINTSTRUCT paint{}; HDC dc = BeginPaint(window,&paint);
@@ -698,7 +747,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     RegisterClassExW(&type);
     UINT dpi = GetDpiForSystem();
     RECT rect{0, 0, ScaleLogical(modern::ClientWidth,dpi,app.scalePercent), ScaleLogical(modern::ClientHeight,dpi,app.scalePercent)};
-    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_CLIPCHILDREN;
     AdjustWindowRectExForDpi(&rect, style, FALSE, 0, dpi);
     int width = rect.right - rect.left, height = rect.bottom - rect.top;
     HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.3", style,

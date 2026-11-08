@@ -8,7 +8,7 @@
 #include "Appearance.h"
 
 namespace modern {
-constexpr int ClientWidth = 960, ClientHeight = 772;
+constexpr int ClientWidth = rainregexp::BaseClientWidth, ClientHeight = rainregexp::BaseClientHeight;
 struct Theme {
     bool dark = false, highContrast = false;
     COLORREF background{}, surface{}, text{}, muted{}, border{}, hover{}, pressed{}, accent{}, onAccent{}, editor{};

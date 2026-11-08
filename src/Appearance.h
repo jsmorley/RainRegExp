@@ -3,6 +3,10 @@
 #include "Core.h"
 #include <windows.h>
 namespace rainregexp {
+inline constexpr int BaseClientWidth = 960, BaseClientHeight = 772;
+// Constrain a dragged outer window rectangle to a whole-percent client scale.
+int ConstrainResize(RECT& bounds, UINT edge, int currentPercent, int frameWidth, int frameHeight);
+std::wstring SetScalePercent(const std::wstring& contents, int percent);
 enum class DarkMode { Auto, Enabled, Disabled };
 DarkMode ParseDarkMode(const std::wstring& contents);
 bool ResolveDarkMode(DarkMode mode, bool windowsDark, bool highContrast);

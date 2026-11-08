@@ -60,6 +60,12 @@ even when Windows is at 125%, 150% or 200%. The value is an absolute scale,
 not a multiplier on Windows scaling. Windows still controls its title bar,
 native scrollbars and common file dialogs.
 
+Drag any window edge or corner to scale the entire interface proportionally,
+including text, buttons and the logo, from 100% through 500%. The proportions
+stay fixed. Releasing the mouse saves the resulting whole-number ScalePercent
+to RainRegExp.ini, with a .bak backup. Other settings and comments are retained;
+unsaved Settings edits remain unsaved. Choose Auto and Save to follow Windows again.
+
 Settings Save validates this value and immediately resizes the app without
 restarting. Reset restores `Auto` in the editor; Save applies it. Unsupported
 values are rejected on Save. An invalid value entered externally falls back

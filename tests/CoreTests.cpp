@@ -59,6 +59,33 @@ int main() {
             try { ParseScalePercent(L"[RainRegExp]\nScalePercent=" + std::wstring(value)); } catch(const std::exception&) { rejectedScale = true; }
             Check(rejectedScale, "Invalid scaling rejected");
         }
+        for (UINT edge = WMSZ_LEFT; edge <= WMSZ_BOTTOMRIGHT; ++edge) {
+            for (int percent : {100,113,151,177,275,499,500}) {
+                RECT bounds{100,200,100+MulDiv(BaseClientWidth,percent,100)+16,200+MulDiv(BaseClientHeight,percent,100)+39};
+                const RECT original = bounds;
+                Check(ConstrainResize(bounds,edge,100,16,39) == percent,"Every edge and corner selects the requested whole scale");
+                Check(bounds.right-bounds.left == MulDiv(BaseClientWidth,percent,100)+16 && bounds.bottom-bounds.top == MulDiv(BaseClientHeight,percent,100)+39,"Drag preserves exact client proportions with native frame excluded");
+                const bool left = edge == WMSZ_LEFT || edge == WMSZ_TOPLEFT || edge == WMSZ_BOTTOMLEFT;
+                const bool top = edge == WMSZ_TOP || edge == WMSZ_TOPLEFT || edge == WMSZ_TOPRIGHT;
+                Check((left ? bounds.right == original.right : bounds.left == original.left) && (top ? bounds.bottom == original.bottom : bounds.top == original.top),"Opposite drag corner stays anchored");
+            }
+        }
+        RECT tiny{0,0,100,100}, huge{0,0,10000,10000};
+        Check(ConstrainResize(tiny,WMSZ_BOTTOMRIGHT,100,16,39) == 100,"Drag has a 100 percent minimum");
+        Check(ConstrainResize(huge,WMSZ_BOTTOMRIGHT,100,16,39) == 500,"Drag has a 500 percent maximum");
+        RECT verticalCorner{0,0,BaseClientWidth+16,MulDiv(BaseClientHeight,125,100)+39};
+        Check(ConstrainResize(verticalCorner,WMSZ_BOTTOMRIGHT,100,16,39) == 125,"Corner dragging follows the dimension that changed most");
+        const std::wstring scaleIni = L"; café\r\n[RainRegExp]\r\nScalePercent=Auto\r\nDarkMode=True\r\n[WebParser]\r\nUserAgent=Mine\r\n";
+        const auto updatedScaleIni = SetScalePercent(scaleIni,177);
+        Check(ParseScalePercent(updatedScaleIni) == 177,"Dragged scale is saved as an explicit percentage");
+        Check(updatedScaleIni == L"; café\r\n[RainRegExp]\r\nScalePercent=177\r\nDarkMode=True\r\n[WebParser]\r\nUserAgent=Mine\r\n","Only the scale entry changes; comments and other settings survive");
+        for (const auto& contents : {L"",L"[WebParser]\nUserAgent=Mine",L"[RainRegExp]",L"[RainRegExp]\n",L"[RainRegExp]\nDarkMode=False\n[WebParser]\n",L"[rainregexp]\n scalepercent = \"Auto\"",L"[ Other ]\nScalePercent=200\n[ RainRegExp ]\n; ScalePercent=150\n"}) {
+            const auto updated = SetScalePercent(contents,151);
+            Check(ParseScalePercent(updated) == 151,"Scale persistence handles missing keys/sections, case, spacing and final newlines");
+            Check(SetScalePercent(updated,151) == updated,"Saving the same scale is idempotent");
+        }
+        const auto pending = SetScalePercent(L"[RainRegExp]\nScalePercent=Auto\nDarkMode=False\n[WebParser]\nUserAgent=Unsaved\n",177);
+        Check(IniValue(pending,L"WebParser",L"UserAgent",L"") == L"Unsaved","Updating the Settings editor preserves unsaved fields");
         Check(std::string(pcre16_version()).find("8.45") == 0, "Exact PCRE version");
         auto result = Match(L"<TITLE>Hello\nWorld</TITLE><item>First</item><item>Second</item>", L"(?siU)<title>(.*)</title>.*<item>(.*)</item>");
         Check(result.code == 3 && result.captures[1] == L"Hello\nWorld" && result.captures[2] == L"First", "Inline siU flags and capture indices");
