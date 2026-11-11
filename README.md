@@ -30,7 +30,7 @@ even if the defaults match the saved file. Exit returns to Welcome. Unsaved edit
 are marked with an asterisk, and Exit/app close offer Save, Discard, or Cancel.
 Switching to another tab preserves unsaved edits.
 
-Click the pencil beside `RainRegExp.ini` to open the file in the Windows
+Click the page icon beside `RainRegExp.ini` to open the file in the Windows
 account's default `.txt` editor. When the file's modification time or size
 changes, RainRegExp waits for the save to finish, reloads the Settings panel
 and applies valid appearance changes. The bottom-left status confirms the save.

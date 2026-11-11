@@ -486,10 +486,13 @@ struct App {
             graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
             Gdiplus::Pen pen(modern::Color(foreground),static_cast<float>(Scale(2)));
             pen.SetLineJoin(Gdiplus::LineJoinRound);
-            const Gdiplus::Point pencil[]{{x-Scale(6),y+Scale(6)},{x-Scale(5),y+Scale(1)},
-                {x+Scale(3),y-Scale(7)},{x+Scale(7),y-Scale(3)},{x-Scale(1),y+Scale(5)}};
-            graphics.DrawPolygon(&pen,pencil,5);
-            graphics.DrawLine(&pen,x+Scale(1),y-Scale(5),x+Scale(5),y-Scale(1));
+            const Gdiplus::Point page[]{{x-Scale(6),y-Scale(8)},{x+Scale(2),y-Scale(8)},
+                {x+Scale(6),y-Scale(4)},{x+Scale(6),y+Scale(8)},{x-Scale(6),y+Scale(8)}};
+            graphics.DrawPolygon(&pen,page,5);
+            const Gdiplus::Point fold[]{{x+Scale(2),y-Scale(8)},{x+Scale(2),y-Scale(4)},{x+Scale(6),y-Scale(4)}};
+            graphics.DrawLines(&pen,fold,3);
+            graphics.DrawLine(&pen,x-Scale(3),y+Scale(1),x+Scale(3),y+Scale(1));
+            graphics.DrawLine(&pen,x-Scale(3),y+Scale(4),x+Scale(3),y+Scale(4));
         } else {
             wchar_t text[80]{}; GetWindowTextW(item.hwndItem,text,80);
             modern::Text(item.hDC,font,foreground,item.rcItem,text,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
