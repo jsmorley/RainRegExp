@@ -484,7 +484,7 @@ struct App {
             const int y = (item.rcItem.top+item.rcItem.bottom)/2;
             Gdiplus::Graphics graphics(item.hDC);
             graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            Gdiplus::Pen pen(modern::Color(foreground),static_cast<float>(Scale(2)));
+            Gdiplus::Pen pen(modern::Color(foreground),std::max(1.0f,Scale(100)/100.0f));
             pen.SetLineJoin(Gdiplus::LineJoinRound);
             const Gdiplus::Point page[]{{x-Scale(6),y-Scale(8)},{x+Scale(2),y-Scale(8)},
                 {x+Scale(6),y-Scale(4)},{x+Scale(6),y+Scale(8)},{x-Scale(6),y+Scale(8)}};
