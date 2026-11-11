@@ -12,6 +12,8 @@
 #include "Network.h"
 #include "ModernTheme.h"
 #include "Appearance.h"
+#include <optional>
+#include <utility>
 #include <thread>
 #include <atomic>
 #include <functional>
@@ -23,8 +25,10 @@ using namespace rainregexp;
 namespace {
 enum Id { Url = 100, Connect, Browse, SearchText, Search, Input, SaveInput, WrapInput,
     Pattern, Parse, Copy, WrapPattern, Save, Load, Output, Tabs, Notes, Help, Link, Banner, Status, Engine, CaptureCount,
-    HtmlHeading, PatternHeading, OutputHeading, SettingsEdit, SettingsLabel, SettingsSave, SettingsReset, SettingsExit };
+    HtmlHeading, PatternHeading, OutputHeading, SettingsEdit, SettingsLabel, SettingsSave, SettingsReset, SettingsExit, SettingsExternal };
 constexpr UINT Completed = WM_APP + 1;
+constexpr UINT_PTR SettingsWatchTimer = 2;
+constexpr ULONGLONG SettingsSaveSettleMs = 500;
 constexpr DWORD EditStyle = WS_TABSTOP | ES_MULTILINE | ES_WANTRETURN | ES_AUTOVSCROLL | WS_VSCROLL;
 struct Control { HWND window; int x, y, width, height; int page; };
 struct App {
@@ -49,6 +53,9 @@ struct App {
     int completedCaptures = -1;
     bool settingsLoaded = false, settingsDirty = false, settingsResetPending = false;
     std::wstring savedSettings;
+    using SettingsFileStamp = std::pair<ULONGLONG,ULONGLONG>;
+    std::optional<SettingsFileStamp> watchedSettings, pendingSettings;
+    ULONGLONG pendingSettingsSince = 0;
     ~App() {
         closing = true;
         if (worker.joinable()) worker.join();
@@ -184,6 +191,7 @@ struct App {
         if (std::filesystem::exists(path) && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
             throw std::runtime_error("Unable to back up RainRegExp.ini. The dragged scale was not saved.");
         WriteText(path,contents);
+        ResetSettingsWatch();
         if (settingsLoaded) {
             const auto editor = SetScalePercent(Text(SettingsEdit),scalePercent);
             savedSettings = SetScalePercent(savedSettings,scalePercent);
@@ -240,7 +248,9 @@ struct App {
         Add(L"STATIC", L"rainmeter.net", SS_NOTIFY | SS_RIGHT, Link, 809, 709, 110, 20, 0);
         Edit(Notes, L"", 512, 559, 408, 166, 0, 1);
         Edit(Help, L"", 512, 559, 408, 166, ES_READONLY, 2);
-        Add(L"STATIC", L"RainRegExp.ini", SS_CENTERIMAGE, SettingsLabel, 512, 551, 175, 28, 3);
+        Add(L"STATIC", L"RainRegExp.ini", SS_CENTERIMAGE, SettingsLabel, 512, 551, 143, 28, 3);
+        Button(L"Open in text editor", SettingsExternal, 658, 551, 28, 28,
+            L"Open RainRegExp.ini in the default .txt editor", 3);
         Edit(SettingsEdit, L"", 512, 592, 408, 131, ES_AUTOHSCROLL | WS_HSCROLL, 3);
         Button(L"Save", SettingsSave, 694, 551, 66, 28, L"Validate and save settings; used on the next connection", 3);
         Button(L"Reset", SettingsReset, 768, 551, 72, 28, L"Restore shipped defaults in the editor; Save to apply", 3);
@@ -264,6 +274,9 @@ struct App {
             std::filesystem::create_directories(browseDirectory, error);
         }
         SetFocus(Get(Url));
+        ResetSettingsWatch();
+        if (!SetTimer(window,SettingsWatchTimer,250,nullptr))
+            throw std::runtime_error("Unable to monitor RainRegExp.ini.");
     }
     void SelectPage() {
         int page = TabCtrl_GetCurSel(Get(Tabs));
@@ -290,7 +303,10 @@ struct App {
     }
     void LoadSettings() {
         const auto path = SettingsPath();
-        auto contents = SettingsEditorText(std::filesystem::exists(path) ? ReadText(path) : ResourceText(6));
+        PopulateSettings(std::filesystem::exists(path) ? ReadText(path) : ResourceText(6));
+    }
+    void PopulateSettings(const std::wstring& text) {
+        const auto contents = SettingsEditorText(text);
         settingsLoaded = false;
         settingsResetPending = false;
         Set(SettingsEdit, contents);
@@ -298,32 +314,133 @@ struct App {
         settingsLoaded = true;
         SettingsChanged();
     }
-    void SaveSettingsToDisk() {
+    bool SaveSettingsToDisk() {
         const auto contents = Text(SettingsEdit);
         // Validate before touching the working INI or its backup.
         ParseNetworkOptions(contents);
         const int newScalePercent = ParseScalePercent(contents);
         const DarkMode newDarkMode = ParseDarkMode(contents);
         const auto path = SettingsPath();
+        const bool exists = std::filesystem::exists(path);
+        if (exists && settingsDirty) {
+            const auto diskText = SettingsEditorText(ReadText(path));
+            if (diskText != savedSettings && diskText != contents &&
+                MessageBoxW(window,L"RainRegExp.ini changed on disk. Replace it with your Settings edits?",
+                    L"RainRegExp settings",MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES)
+                return false;
+        }
         auto backup = path; backup += L".bak";
-        if (std::filesystem::exists(path) && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
+        if (exists && !CopyFileW(path.c_str(),backup.c_str(),FALSE))
             throw std::runtime_error("Unable to back up RainRegExp.ini. Settings were not saved.");
         WriteText(path, contents);
+        ResetSettingsWatch();
         settingsResetPending = false;
         savedSettings = contents;
         settingsLoaded = true;
         SettingsChanged();
+        ApplyAppearance(newScalePercent,newDarkMode);
+        Set(Status,L"Settings saved — appearance applied; connection options ready");
+        return true;
+    }
+    void ApplyAppearance(int newScalePercent, DarkMode newDarkMode) {
         if (newDarkMode != darkMode) { darkMode = newDarkMode; RefreshTheme(); }
         if (newScalePercent != scalePercent) ApplyScale(newScalePercent);
-        Set(Status,L"Settings saved — appearance applied; connection options ready");
+    }
+    std::optional<SettingsFileStamp> SettingsStamp() const {
+        WIN32_FILE_ATTRIBUTE_DATA data{};
+        if (!GetFileAttributesExW(SettingsPath().c_str(),GetFileExInfoStandard,&data)) return std::nullopt;
+        const auto combine = [](DWORD high, DWORD low) { return (static_cast<ULONGLONG>(high)<<32) | low; };
+        return SettingsFileStamp{combine(data.ftLastWriteTime.dwHighDateTime,data.ftLastWriteTime.dwLowDateTime),
+            combine(data.nFileSizeHigh,data.nFileSizeLow)};
+    }
+    void ResetSettingsWatch() {
+        watchedSettings = SettingsStamp();
+        pendingSettings.reset();
+    }
+    void PollSettingsFile() {
+        const auto stamp = SettingsStamp();
+        if (!stamp || stamp == watchedSettings) {
+            pendingSettings.reset();
+            return;
+        }
+        const auto now = GetTickCount64();
+        if (stamp != pendingSettings) {
+            pendingSettings = stamp;
+            pendingSettingsSince = now;
+            return;
+        }
+        if (now-pendingSettingsSince < SettingsSaveSettleMs) return;
+
+        std::wstring contents;
+        try {
+            contents = ReadText(SettingsPath());
+        } catch (const std::runtime_error&) {
+            return; // An editor may still hold the file open for writing.
+        }
+        if (SettingsStamp() != stamp) return;
+        watchedSettings = stamp;
+        pendingSettings.reset();
+        SettingsChanged();
+        if (!settingsDirty) PopulateSettings(contents);
+        try {
+            ParseNetworkOptions(contents);
+            const auto newScale = ParseScalePercent(contents);
+            const auto newDarkMode = ParseDarkMode(contents);
+            ApplyAppearance(newScale,newDarkMode);
+            Set(Status,settingsDirty ? L"INI saved. Changes applied. Settings draft kept." : L"RainRegExp.ini saved. Changes applied.");
+        } catch (const std::runtime_error&) {
+            Set(Status,L"INI saved. Invalid settings. Correct and save.");
+        }
+    }
+    void EditSettingsExternally() {
+        const auto path = SettingsPath();
+        if (!std::filesystem::exists(path)) {
+            WriteText(path,ResourceText(6));
+            ResetSettingsWatch();
+        }
+
+        SHELLEXECUTEINFOW launch{sizeof(launch)};
+        launch.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+        launch.hwnd = window;
+        launch.lpVerb = L"open";
+        launch.lpFile = path.c_str();
+        launch.nShow = SW_SHOWNORMAL;
+
+        // Resolve the .txt association rather than using the INI association.
+        HKEY association = nullptr;
+        if (AssocQueryKeyW(ASSOCF_NONE,ASSOCKEY_SHELLEXECCLASS,L".txt",L"open",&association) == S_OK) {
+            launch.fMask |= SEE_MASK_CLASSKEY;
+            launch.hkeyClass = association;
+            const bool opened = ShellExecuteExW(&launch) != FALSE;
+            RegCloseKey(association);
+            if (opened) return;
+        }
+
+        DWORD length = 0;
+        AssocQueryStringW(ASSOCF_NONE,ASSOCSTR_EXECUTABLE,L".txt",L"open",nullptr,&length);
+        std::wstring executable(length,L'\0');
+        if (!length || AssocQueryStringW(ASSOCF_NONE,ASSOCSTR_EXECUTABLE,L".txt",L"open",executable.data(),&length) != S_OK)
+            throw std::runtime_error("Choose a default app for .txt files in Windows Settings.");
+
+        const auto argument = L"\"" + path.wstring() + L"\"";
+        launch.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+        launch.hkeyClass = nullptr;
+        launch.lpFile = executable.c_str();
+        launch.lpParameters = argument.c_str();
+        if (!ShellExecuteExW(&launch))
+            throw std::runtime_error("Unable to open RainRegExp.ini in the default .txt editor (Windows error " +
+                std::to_string(GetLastError()) + ").");
     }
     bool ConfirmSettingsExit() {
         SettingsChanged();
         if (!settingsDirty) return true;
         int choice = MessageBoxW(window,L"Save your changes to RainRegExp.ini?",L"Unsaved settings",MB_YESNOCANCEL | MB_ICONQUESTION);
         if (choice == IDCANCEL) return false;
-        if (choice == IDYES) SaveSettingsToDisk();
-        else { settingsLoaded = false; settingsDirty = false; settingsResetPending = false; Set(SettingsLabel,L"RainRegExp.ini"); }
+        if (choice == IDYES) return SaveSettingsToDisk();
+        settingsLoaded = false;
+        settingsDirty = false;
+        settingsResetPending = false;
+        Set(SettingsLabel,L"RainRegExp.ini");
         return true;
     }
     void TabBackground(HWND control, HDC dc) const {
@@ -362,8 +479,21 @@ struct App {
         else if (primary && hoveredButton == item.hwndItem && !theme.highContrast) fill = theme.dark ? RGB(125,185,245) : RGB(48,131,207);
         FillRect(item.hDC,&item.rcItem,item.CtlID == Connect || item.CtlID == Browse || item.CtlID == Search ? theme.backgroundBrush : theme.surfaceBrush);
         modern::Round(item.hDC,item.rcItem,theme.highContrast ? 0 : Scale(7),fill,edge);
-        wchar_t text[80]{}; GetWindowTextW(item.hwndItem,text,80);
-        modern::Text(item.hDC,font,foreground,item.rcItem,text,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (item.CtlID == SettingsExternal) {
+            const int x = (item.rcItem.left+item.rcItem.right)/2;
+            const int y = (item.rcItem.top+item.rcItem.bottom)/2;
+            Gdiplus::Graphics graphics(item.hDC);
+            graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            Gdiplus::Pen pen(modern::Color(foreground),static_cast<float>(Scale(2)));
+            pen.SetLineJoin(Gdiplus::LineJoinRound);
+            const Gdiplus::Point pencil[]{{x-Scale(6),y+Scale(6)},{x-Scale(5),y+Scale(1)},
+                {x+Scale(3),y-Scale(7)},{x+Scale(7),y-Scale(3)},{x-Scale(1),y+Scale(5)}};
+            graphics.DrawPolygon(&pen,pencil,5);
+            graphics.DrawLine(&pen,x+Scale(1),y-Scale(5),x+Scale(5),y-Scale(1));
+        } else {
+            wchar_t text[80]{}; GetWindowTextW(item.hwndItem,text,80);
+            modern::Text(item.hDC,font,foreground,item.rcItem,text,DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
         if ((item.itemState & ODS_FOCUS) && !(item.itemState & ODS_NOFOCUSRECT)) {
             RECT focus = item.rcItem; InflateRect(&focus,-Scale(4),-Scale(4));
             SetTextColor(item.hDC,foreground); SetBkColor(item.hDC,fill); DrawFocusRect(item.hDC,&focus);
@@ -514,7 +644,7 @@ struct App {
         switch (id) {
         case Connect: {
             if (busy) break;
-            const auto options = ReadNetworkOptions(directory / L"RainRegExp.ini");
+            const auto options = ReadNetworkOptions(SettingsPath());
             const auto url = Text(Url);
             Set(Input, L"Connecting...");
             Start(Input, [this, url, options] {
@@ -550,6 +680,7 @@ struct App {
             break;
         }
         case Copy: Clipboard(); break;
+        case SettingsExternal: EditSettingsExternally(); break;
         case SettingsSave: SaveSettingsToDisk(); break;
         case SettingsReset:
             settingsResetPending = true;
@@ -658,7 +789,10 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             app->Set(Status,L"Ready");
             if (app->completedTarget == Output) app->Set(CaptureCount,app->completedCaptures >= 0 ? std::to_wstring(app->completedCaptures) + L" captures" : L"");
             return 0;
-        case WM_TIMER: SetWindowTextW(app->Get(Copy), L"Copy"); KillTimer(window, 1); return 0;
+        case WM_TIMER:
+            if (wParam == SettingsWatchTimer) { app->PollSettingsFile(); return 0; }
+            if (wParam == 1) { SetWindowTextW(app->Get(Copy), L"Copy"); KillTimer(window,1); return 0; }
+            break;
         case WM_CTLCOLOREDIT:
         case WM_CTLCOLORSTATIC: {
             const auto dc = reinterpret_cast<HDC>(wParam);
@@ -709,6 +843,10 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
+    struct ShellApartment {
+        HRESULT result = CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        ~ShellApartment() { if (SUCCEEDED(result)) CoUninitialize(); }
+    } shellApartment;
     struct GdiRuntime {
         ULONG_PTR token{};
         GdiRuntime() { Gdiplus::GdiplusStartupInput options; Gdiplus::GdiplusStartup(&token, &options, nullptr); }
@@ -750,7 +888,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_CLIPCHILDREN;
     AdjustWindowRectExForDpi(&rect, style, FALSE, 0, dpi);
     int width = rect.right - rect.left, height = rect.bottom - rect.top;
-    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.3", style,
+    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.4", style,
         (GetSystemMetrics(SM_CXSCREEN) - width) / 2, (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
         width, height, nullptr, nullptr, instance, &app);
     if (!window) { if (singleton) CloseHandle(singleton); return 1; }

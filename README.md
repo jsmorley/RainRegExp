@@ -1,4 +1,4 @@
-# RainRegExp 5.3
+# RainRegExp 5.4
 
 Native C++ / Win32 replacement for RainRegExp.au3. Copyright © 2026 Jeffrey
 Morley. Licensed under CC BY-NC-SA 3.0 Unported; see COPYRIGHT.txt and
@@ -6,7 +6,7 @@ LICENSE.txt. PCRE keeps its original license.
 
 ## Run
 
-Current release: **5.3**. Portable package: **RainRegExp_5.3.zip**.
+Current release: **5.4**. Portable package: **RainRegExp_5.4.zip**.
 
 Download the portable ZIP from [GitHub Releases](https://github.com/jsmorley/RainRegExp/releases), extract it, and run `RainRegExp.exe`. Keep `RainRegExp.ini` beside it.
 
@@ -29,6 +29,13 @@ the editor; click Save to apply them. Reset always requires Save or Discard,
 even if the defaults match the saved file. Exit returns to Welcome. Unsaved edits
 are marked with an asterisk, and Exit/app close offer Save, Discard, or Cancel.
 Switching to another tab preserves unsaved edits.
+
+Click the pencil beside `RainRegExp.ini` to open the file in the Windows
+account's default `.txt` editor. When the file's modification time or size
+changes, RainRegExp waits for the save to finish, reloads the Settings panel
+and applies valid appearance changes. The bottom-left status confirms the save.
+You can keep the external editor open. If Settings has unsaved edits, RainRegExp keeps your draft and asks
+before overwriting a file that changed on disk.
 ## Dark mode
 
 ```ini
