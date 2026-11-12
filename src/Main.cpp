@@ -3,6 +3,7 @@
 #include <commdlg.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <shobjidl.h>
 #include <shlwapi.h>
 #include <objidl.h>
 #include <gdiplus.h>
@@ -208,8 +209,8 @@ struct App {
             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, window, nullptr, instance, nullptr);
         Add(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, Url, 29, 20, 323, 32);
         SendMessageW(Get(Url), EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Enter web site URL or browse for HTML / text file"));
-        Button(L"Connect", Connect, 369, 18, 88, 36, L"Download source using RainRegExp.ini settings");
-        Button(L"Browse", Browse, 465, 18, 83, 36, L"Browse for a local HTML or text file");
+        Button(L"Connect", Connect, 369, 18, 88, 36, L"Open the URL, local file, or folder in the URL field");
+        Button(L"Browse", Browse, 465, 18, 83, 36, L"Open the local file or browse for one");
         Add(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, SearchText, 591, 20, 244, 32);
         SendMessageW(Get(SearchText), EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Find in HTML…"));
         Button(L"Search", Search, 858, 18, 84, 36, L"Find the next occurrence in the HTML (case insensitive)");
@@ -553,6 +554,47 @@ struct App {
         if (message == WM_LBUTTONDOWN || message == WM_KEYDOWN || message == WM_SETFOCUS || message == WM_KILLFOCUS) InvalidateRect(tab,nullptr,FALSE);
         return result;
     }
+    void RememberBrowseDirectory(const std::filesystem::path& file) {
+        browseDirectory = file.parent_path();
+        const auto dir = browseDirectory.wstring();
+        if (!std::filesystem::exists(directory / L"Rainmeter.ini"))
+            RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Rainmeter\\RainRegExp", L"CurrentBrowseDir", REG_SZ,
+                dir.c_str(), static_cast<DWORD>((dir.size() + 1) * sizeof(wchar_t)));
+    }
+    std::filesystem::path BrowseFromFolder(const std::filesystem::path& folder) {
+        const auto release = [](IUnknown* object) { object->Release(); };
+        IFileOpenDialog* rawDialog = nullptr;
+        if (FAILED(CoCreateInstance(__uuidof(FileOpenDialog),nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&rawDialog))))
+            throw std::runtime_error("Unable to open the file dialog.");
+        std::unique_ptr<IFileOpenDialog,decltype(release)> dialog(rawDialog,release);
+
+        IShellItem* rawFolder = nullptr;
+        if (FAILED(SHCreateItemFromParsingName(folder.c_str(),nullptr,IID_PPV_ARGS(&rawFolder))))
+            throw std::runtime_error("Unable to open the requested folder.");
+        std::unique_ptr<IShellItem,decltype(release)> startingFolder(rawFolder,release);
+
+        const COMDLG_FILTERSPEC filters[]{{L"HTML and text files",L"*.html;*.htm;*.txt;*.xml;*.json"},{L"All files (*.*)",L"*.*"}};
+        DWORD options = 0;
+        if (FAILED(dialog->GetOptions(&options)) ||
+            FAILED(dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST)) ||
+            FAILED(dialog->SetFileTypes(static_cast<UINT>(std::size(filters)),filters)) ||
+            FAILED(dialog->SetDefaultExtension(L"txt")) ||
+            FAILED(dialog->SetTitle(L"Open HTML or text file")) ||
+            FAILED(dialog->SetFolder(startingFolder.get())))
+            throw std::runtime_error("Unable to configure the file dialog for the requested folder.");
+
+        const HRESULT result = dialog->Show(window);
+        if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) return {};
+        IShellItem* rawFile = nullptr;
+        if (FAILED(result) || FAILED(dialog->GetResult(&rawFile)))
+            throw std::runtime_error("Unable to open the selected file.");
+        std::unique_ptr<IShellItem,decltype(release)> file(rawFile,release);
+        PWSTR rawPath = nullptr;
+        if (FAILED(file->GetDisplayName(SIGDN_FILESYSPATH,&rawPath)))
+            throw std::runtime_error("Unable to read the selected file path.");
+        std::unique_ptr<wchar_t,decltype(&CoTaskMemFree)> path(rawPath,CoTaskMemFree);
+        return std::filesystem::path(path.get());
+    }
     std::filesystem::path FileDialog(bool save, bool session) {
         wchar_t file[32768]{};
         OPENFILENAMEW dialog{sizeof(dialog)};
@@ -567,11 +609,7 @@ struct App {
             return {};
         }
         std::filesystem::path path(file);
-        browseDirectory = path.parent_path();
-        const auto dir = browseDirectory.wstring();
-        if (!std::filesystem::exists(directory / L"Rainmeter.ini"))
-            RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Rainmeter\\RainRegExp", L"CurrentBrowseDir", REG_SZ,
-                dir.c_str(), static_cast<DWORD>((dir.size() + 1) * sizeof(wchar_t)));
+        RememberBrowseDirectory(path);
         return path;
     }
     void Wrap(int id, bool& wrapped) {
@@ -643,24 +681,53 @@ struct App {
             });
         } catch (...) { Busy(false); Set(Status,L"Ready"); throw; }
     }
+    void LoadLocalInput(const std::filesystem::path& file) {
+        if (file.empty()) return;
+        const auto text = ReadText(file);
+        Set(Input,text);
+        Set(Url,file.wstring());
+        RememberBrowseDirectory(file);
+    }
+    void OpenInput(bool browse) {
+        if (busy) return;
+        auto location = Text(Url);
+        const auto start = location.find_first_not_of(L" \t\r\n");
+        location = start == std::wstring::npos ? L"" : location.substr(start,location.find_last_not_of(L" \t\r\n")-start+1);
+        if (location.size() >= 2 && location.front() == L'"' && location.back() == L'"')
+            location = location.substr(1,location.size()-2);
+
+        if (!location.empty() && location.find(L"://") == std::wstring::npos) {
+            const auto path = std::filesystem::absolute(std::filesystem::path(location));
+            std::error_code error;
+            const auto status = std::filesystem::status(path,error);
+            if (std::filesystem::is_directory(status)) {
+                LoadLocalInput(BrowseFromFolder(path));
+                return;
+            }
+            if (std::filesystem::is_regular_file(status)) {
+                LoadLocalInput(path);
+                return;
+            }
+            throw std::runtime_error("The file or folder in the URL field could not be found or opened.");
+        }
+
+        if (browse) {
+            LoadLocalInput(FileDialog(false,false));
+            return;
+        }
+
+        const auto options = ReadNetworkOptions(SettingsPath());
+        const auto url = std::move(location);
+        Set(Input,L"Connecting...");
+        Start(Input,[this,url,options] {
+            try { return Fetch(url,options,closing); }
+            catch (const std::exception& error) { return L"Connection Error!\r\nUnable to connect to web site: (" + url + L")\r\n\r\n" + DecodeText(error.what()); }
+        });
+    }
     void Command(int id) {
         switch (id) {
-        case Connect: {
-            if (busy) break;
-            const auto options = ReadNetworkOptions(SettingsPath());
-            const auto url = Text(Url);
-            Set(Input, L"Connecting...");
-            Start(Input, [this, url, options] {
-                try { return Fetch(url, options, closing); }
-                catch (const std::exception& error) { return L"Connection Error!\r\nUnable to connect to web site: (" + url + L")\r\n\r\n" + DecodeText(error.what()); }
-            });
-            break;
-        }
-        case Browse: {
-            const auto path = FileDialog(false, false);
-            if (!path.empty()) { const auto text = ReadText(path); Set(Input, text); Set(Url, path.wstring()); }
-            break;
-        }
+        case Connect: OpenInput(false); break;
+        case Browse: OpenInput(true); break;
         case SaveInput: { const auto path = FileDialog(true, false); if (!path.empty()) WriteText(path, Text(Input)); break; }
         case Save: { const auto path = FileDialog(true, true); if (!path.empty()) SaveSession(path, {Text(Url), Text(Pattern), Text(Notes)}); break; }
         case Load: {
@@ -891,7 +958,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_CLIPCHILDREN;
     AdjustWindowRectExForDpi(&rect, style, FALSE, 0, dpi);
     int width = rect.right - rect.left, height = rect.bottom - rect.top;
-    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.4", style,
+    HWND window = CreateWindowExW(0, type.lpszClassName, L"RainRegExp 5.5", style,
         (GetSystemMetrics(SM_CXSCREEN) - width) / 2, (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
         width, height, nullptr, nullptr, instance, &app);
     if (!window) { if (singleton) CloseHandle(singleton); return 1; }
@@ -902,6 +969,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         // Dialog navigation without treating Escape as a request to close.
         if (message.message == WM_KEYDOWN && message.wParam == VK_ESCAPE) continue;
+        if (message.message == WM_KEYDOWN && message.wParam == VK_RETURN && message.hwnd == app.Get(Url)) {
+            SendMessageW(window,WM_COMMAND,MAKEWPARAM(Connect,BN_CLICKED),reinterpret_cast<LPARAM>(app.Get(Connect)));
+            continue;
+        }
         if (!IsDialogMessageW(window, &message)) { TranslateMessage(&message); DispatchMessageW(&message); }
     }
     if (singleton) CloseHandle(singleton);

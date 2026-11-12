@@ -1,4 +1,4 @@
-# RainRegExp 5.4
+# RainRegExp 5.5
 
 Native C++ / Win32 replacement for RainRegExp.au3. Copyright © 2026 Jeffrey
 Morley. Licensed under CC BY-NC-SA 3.0 Unported; see COPYRIGHT.txt and
@@ -6,7 +6,7 @@ LICENSE.txt. PCRE keeps its original license.
 
 ## Run
 
-Current release: **5.4**. Portable package: **RainRegExp_5.4.zip**.
+Current release: **5.5**. Portable package: **RainRegExp_5.5.zip**.
 
 Download the portable ZIP from [GitHub Releases](https://github.com/jsmorley/RainRegExp/releases), extract it, and run `RainRegExp.exe`. Keep `RainRegExp.ini` beside it.
 
@@ -112,13 +112,19 @@ configuration error. Unlike Rainmeter, this utility stops that request rather
 than logging and ignoring the bad flag. Comment lines start with `;`.
 
 Connect uses WinINet and HTTP/HTTPS with 15-second connection/send/receive
-timeouts. Browse loads local HTML/text files. Network responses are decoded
+timeouts. Network responses are decoded
 using UTF-8, WebParser's default CodePage. Rainmeter skin variables, formulas,
 bangs and child measure processing are not evaluated by this standalone tool.
 
 ## Parse and other controls
 
-Enter a URL and Connect, or Browse for a local file. Enter a pattern and click
+Type or paste a URL, local file, or folder into the URL field. Press Enter or
+click Connect to fetch a URL. For a local file or folder, Enter, Connect, and
+Browse all work the same way. A file loads directly. A folder opens the file
+picker at that location. Paths copied with surrounding quotes are accepted.
+With an empty field or a URL, Browse opens the regular file picker.
+
+Enter a pattern and click
 Parse. Copy puts the expression on the Unicode clipboard. Search finds the
 next case-insensitive occurrence in the HTML; after reaching the end it
 beeps and resets, like the original. Wrap buttons preserve text and selection;
